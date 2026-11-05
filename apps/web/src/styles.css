@@ -48,6 +48,16 @@ button {
   border: 0;
   padding: 0;
   cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    color 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+button:active {
+  transform: scale(0.97);
+  opacity: 0.75;
 }
 
 button:disabled {
@@ -59,6 +69,7 @@ input,
 textarea {
   font: inherit;
   color: inherit;
+  transition: border-color 0.2s ease;
 }
 
 .boot {
@@ -67,6 +78,52 @@ textarea {
   height: 100%;
   font: italic 14px/1.6 var(--serif);
   color: var(--faint);
+  animation: rise 0.5s ease both;
+}
+
+/* the shared vocabulary: everything either rises, slides, or breathes — nothing bounces */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(34px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* shell */
@@ -180,11 +237,44 @@ textarea {
   color: var(--faint);
 }
 
+/* the login reads like a page being put into the typewriter */
+.login > * {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.login > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.login > *:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.login > *:nth-child(3) {
+  animation-delay: 0.23s;
+}
+
+.login > *:nth-child(4) {
+  animation-delay: 0.32s;
+}
+
 /* masthead */
 
 .masthead {
   padding: 20px 22px 0;
   flex: none;
+}
+
+.masthead > * {
+  animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.masthead > *:nth-child(2) {
+  animation-delay: 0.07s;
+}
+
+.masthead > *:nth-child(3) {
+  animation-delay: 0.14s;
 }
 
 .kicker {
@@ -218,23 +308,7 @@ textarea {
 }
 
 .dot-live {
-  animation: dot-pulse 1.8s ease-in-out infinite;
-}
-
-@keyframes dot-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(63, 107, 82, 0.35);
-  }
-  60% {
-    box-shadow: 0 0 0 5px rgba(63, 107, 82, 0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dot-live {
-    animation: none;
-  }
+  animation: halo 2.6s ease-out infinite;
 }
 
 .kicker .right {
@@ -330,6 +404,19 @@ textarea {
 
 .project {
   margin-top: 22px;
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.project:nth-of-type(2) {
+  animation-delay: 0.08s;
+}
+
+.project:nth-of-type(3) {
+  animation-delay: 0.16s;
+}
+
+.project:nth-of-type(4) {
+  animation-delay: 0.22s;
 }
 
 .project-head {
@@ -401,6 +488,28 @@ textarea {
   text-align: left;
   padding: 12px 0 13px;
   border-bottom: 1px solid var(--rule);
+  transition: background-color 0.4s ease;
+}
+
+/* the running state is alive: the mark sheds a slow halo */
+.task-working .task-mark {
+  color: var(--green);
+  border-radius: 50%;
+  animation: halo 2.6s ease-out infinite;
+}
+
+.task-attention .task-mark {
+  color: var(--accent);
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(63, 107, 82, 0.3);
+  }
+  55% {
+    box-shadow: 0 0 0 6px rgba(63, 107, 82, 0);
+  }
 }
 
 .task:active {
@@ -432,14 +541,6 @@ textarea {
   width: 11px;
   font: 400 13px/1.5 var(--serif);
   color: var(--faint);
-}
-
-.task-working .task-mark {
-  color: var(--green);
-}
-
-.task-attention .task-mark {
-  color: var(--accent);
 }
 
 .task-body {
@@ -503,8 +604,12 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spin {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -531,6 +636,7 @@ textarea {
 
 .task-view {
   height: 100dvh;
+  animation: slide-in 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .topnav {
@@ -660,6 +766,7 @@ button.pill::after {
 
 .turn {
   margin-bottom: 20px;
+  animation: rise 0.3s ease both;
 }
 
 .role {
@@ -790,6 +897,7 @@ button.pill::after {
 .footnote,
 .reasoning {
   margin: -6px 0 18px;
+  animation: rise 0.28s ease both;
 }
 
 .footnote summary,
@@ -912,6 +1020,7 @@ button.pill::after {
     rgba(168, 73, 42, 0.035) 0 6px,
     transparent 6px 12px
   );
+  animation: rise 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .note-label {
@@ -1115,6 +1224,7 @@ button.pill::after {
   background: var(--paper);
   background-image: radial-gradient(120% 60% at 50% 0%, #fffdf9, var(--paper) 55%);
   padding-top: env(safe-area-inset-top);
+  animation: sheet-up 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .sheet .topnav {
@@ -1216,6 +1326,7 @@ button.pill::after {
   text-align: center;
   font: italic 14px/1.6 var(--serif);
   color: var(--faint);
+  animation: breathe 2.2s ease-in-out infinite;
 }
 
 .error {
