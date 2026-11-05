@@ -793,6 +793,71 @@ button.pill::after {
   border-left: 2px solid var(--accent);
 }
 
+/* while the turn runs, the tail of the record answers live */
+
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  background: var(--green);
+  animation: caret-blink 1.05s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -4px 0 26px;
+  font: italic 13.5px/1.6 var(--serif);
+  color: var(--green);
+  animation: rise 0.3s ease both;
+}
+
+.think-dots {
+  display: inline-flex;
+  gap: 3.5px;
+}
+
+.think-dots i {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: var(--green);
+  opacity: 0.28;
+  animation: think-dot 1.2s ease-in-out infinite;
+}
+
+.think-dots i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.think-dots i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes think-dot {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+
 /* markdown */
 
 .md {

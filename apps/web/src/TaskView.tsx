@@ -244,6 +244,30 @@ export function TaskView({
   const state = running ? 'working' : 'idle'
   const tone = toneForState(state)
 
+  // What the agent is doing right now, read off the tail: the newest running tool
+  // names the activity, a streamed answer gets the caret, otherwise it is thinking.
+  const stream = useMemo(() => {
+    if (!running) {
+      return { activity: '', caretItem: null as string | null }
+    }
+    const items = page?.items ?? []
+    let caretItem: string | null = null
+    let activity = '正在思考'
+    for (let index = items.length - 1; index >= 0; index--) {
+      const item = items[index]!
+      if (item.body.kind === 'tool-call' && item.body.state === 'running') {
+        activity = `正在 ${item.body.name ?? '动手'}`
+        break
+      }
+      if (messageRole(item) === 'assistant') {
+        caretItem = item.itemId
+        activity = '正在回复'
+        break
+      }
+    }
+    return { activity, caretItem }
+  }, [page?.items, running])
+
   const setOption = async (key: string, value: string) => {
     if (!page?.fence) {
       return
@@ -380,6 +404,7 @@ export function TaskView({
                   item={item}
                   agent={agent}
                   showRole={false}
+                  live={item.itemId === stream.caretItem}
                   disabled={busy}
                   onRespond={respond}
                 />
@@ -391,11 +416,23 @@ export function TaskView({
               item={entry.item}
               agent={agent}
               showRole={entry.showRole}
+              live={entry.item.itemId === stream.caretItem}
               disabled={busy}
               onRespond={respond}
             />
           )
         )}
+        {running && stream.activity && !error ? (
+          <p className="thinking">
+            <i className="spin" aria-hidden="true" />
+            <span>{stream.activity}</span>
+            <span className="think-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </p>
+        ) : null}
         {page && page.items.length === 0 ? <p className="empty">还没有消息</p> : null}
         {!page && !error ? <p className="empty">载入中…</p> : null}
         {error ? <p className="error">{error}</p> : null}
@@ -594,12 +631,14 @@ function Item({
   item,
   agent,
   showRole,
+  live = false,
   disabled,
   onRespond
 }: {
   item: HistoryItem
   agent?: string
   showRole: boolean
+  live?: boolean
   disabled: boolean
   onRespond: Respond
 }) {
@@ -623,7 +662,10 @@ function Item({
     return (
       <div className={`turn${body.role === 'user' ? ' turn-user' : ''}`}>
         {showRole ? <div className="role">{body.role === 'user' ? '你' : (agent ?? 'agent')}</div> : null}
-        <div className="body">{body.role === 'user' ? text : <Markdown text={text} />}</div>
+        <div className="body">
+          {body.role === 'user' ? text : <Markdown text={text} />}
+          {live && body.role === 'assistant' ? <span className="caret" aria-hidden="true" /> : null}
+        </div>
       </div>
     )
   }
@@ -635,7 +677,12 @@ function Item({
           <span className="lead">↳</span>
           <span className="name">{body.name ?? '工具'}</span>
           <span className="what">{summarizeToolInput(body.input)}</span>
-          {body.state === 'running' ? <span className="meta">进行中</span> : null}
+          {body.state === 'running' ? (
+            <span className="meta">
+              <i className="spin" aria-hidden="true" />
+              进行中
+            </span>
+          ) : null}
         </summary>
         <pre>{body.output?.head ?? JSON.stringify(body.input, null, 2)}</pre>
       </details>
