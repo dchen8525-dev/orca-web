@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>02 · Native — orca-web</title>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: #ffffff;
+    --text: #000000;
+    --muted: #6c6c70;
+    --faint: #8e8e93;
+    --sep: rgba(60, 60, 67, 0.16);
+    --blue: #007aff;
+    --green: #34c759;
+    --orange: #ff9500;
+    --red: #ff3b30;
+    --fill: rgba(120, 120, 128, 0.12);
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue',
+      'Microsoft YaHei', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #d9d9de;
+    color: var(--text);
+    font: 17px/1.4 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage { min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  .phone {
+    position: relative; display: flex; flex-direction: column;
+    width: 100%; max-width: 390px; height: 100dvh; background: var(--bg); overflow: hidden;
+  }
+  @media (min-width: 520px) {
+    .stage { background: radial-gradient(60% 50% at 50% 0%, #ececf1, #cfcfd6); }
+    .phone {
+      height: 844px; border-radius: 44px;
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.28), 0 0 0 10px #111, 0 0 0 11px #3a3a3c;
+    }
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .screen { display: flex; flex-direction: column; height: 100%; animation: enter 0.28s cubic-bezier(0.32, 0.72, 0, 1) both; }
+  @keyframes enter { from { opacity: 0; transform: translateY(10px) scale(0.995); } to { opacity: 1; transform: none; } }
+
+  /* header */
+  .big {
+    padding: calc(18px + env(safe-area-inset-top)) 20px 6px;
+    background: rgba(242, 242, 247, 0.82);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid transparent;
+  }
+  .big-row { display: flex; align-items: center; gap: 10px; }
+  .big h1 { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
+  .status-pill {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 999px; background: rgba(52, 199, 89, 0.14);
+    color: #248a3d; font-size: 12.5px; font-weight: 600;
+  }
+  .status-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .big p { margin: 6px 0 14px; color: var(--faint); font-size: 13px; }
+
+  .seg {
+    display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: rgba(118, 118, 128, 0.12);
+    margin: 0 20px 12px;
+  }
+  .seg button {
+    flex: 1; padding: 7px 0; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text);
+    transition: background 0.18s, box-shadow 0.18s;
+  }
+  .seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); font-weight: 600; }
+
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  .sec { margin-top: 18px; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 8px; padding: 0 6px 7px;
+    font-size: 13px; font-weight: 600; color: var(--faint); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .sec-head span { margin-left: auto; font-weight: 400; }
+  .card { background: var(--card); border-radius: 14px; overflow: hidden; box-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.04); }
+  .wt-head {
+    display: flex; align-items: center; gap: 7px; padding: 9px 16px;
+    background: rgba(118, 118, 128, 0.06); font-size: 12.5px; color: var(--muted);
+    border-bottom: 0.5px solid var(--sep);
+  }
+  .wt-head .bi { color: var(--faint); }
+  .wt-head button { margin-left: auto; color: var(--blue); font-size: 13px; font-weight: 500; padding: 2px 0 2px 8px; }
+  .row {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 11px 14px 11px 12px; position: relative; transition: background 0.12s;
+  }
+  .row + .row::before {
+    content: ''; position: absolute; top: 0; left: 56px; right: 0; height: 0.5px; background: var(--sep);
+  }
+  .row:active { background: var(--fill); }
+  .tile {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    display: grid; place-items: center; font-size: 15px; font-weight: 700; color: #fff;
+    background: linear-gradient(160deg, #8e8e93, #636366);
+  }
+  .tile.running { background: linear-gradient(160deg, #5ee07a, #24a148); }
+  .tile.attention { background: linear-gradient(160deg, #ffc862, #ef8c00); }
+  .row-body { display: block; min-width: 0; flex: 1; }
+  .row-title {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: 15.5px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.35;
+  }
+  .row-sub { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  .row-detail {
+    display: block; flex: 1; min-width: 0; font-size: 12.5px; color: var(--faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row-time { flex: none; font-size: 11.5px; color: var(--faint); }
+  .spinner {
+    flex: none; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid rgba(52, 199, 89, 0.25); border-top-color: var(--green);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { padding: 50px 20px; text-align: center; color: var(--faint); font-size: 14px; }
+
+  /* nav (task) */
+  .navbar {
+    display: flex; align-items: center; height: 50px; padding: 0 8px 0 4px;
+    background: rgba(249, 249, 251, 0.86); backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid var(--sep); position: relative; z-index: 3;
+  }
+  .nav-back { display: flex; align-items: center; gap: 2px; color: var(--blue); font-size: 17px; padding: 6px 8px; }
+  .nav-back span { font-size: 20px; line-height: 1; margin-top: -1px; }
+  .nav-center { position: absolute; left: 50%; transform: translateX(-50%); font-size: 16px; font-weight: 600; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-end { margin-left: auto; color: var(--red); font-size: 15px; padding: 6px 10px; }
+
+  .task-meta-row {
+    display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+    background: rgba(249, 249, 251, 0.86); backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid var(--sep); font-size: 12.5px; color: var(--faint);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .dot.running { background: var(--green); box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.16); }
+  .dot.attention { background: var(--orange); box-shadow: 0 0 0 3px rgba(255, 149, 0, 0.16); }
+
+  .thread { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 16px 16px 6px; }
+  .thread::-webkit-scrollbar { width: 0; }
+  .blk { margin-bottom: 14px; animation: enter 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; }
+  .who { font-size: 11.5px; font-weight: 600; color: var(--faint); margin: 0 4px 5px; letter-spacing: 0.02em; }
+  .bubble-me {
+    margin-left: auto; width: fit-content; max-width: 82%;
+    background: linear-gradient(180deg, #1a8cff, #007aff); color: #fff;
+    padding: 9px 14px; border-radius: 18px; border-bottom-right-radius: 5px;
+    font-size: 15.5px; line-height: 1.45;
+  }
+  .bubble-ai {
+    width: fit-content; max-width: 88%; background: var(--card); border-radius: 18px;
+    border-bottom-left-radius: 6px; padding: 10px 14px; font-size: 15.5px; line-height: 1.5;
+    box-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.04);
+  }
+  .bubble-ai code, .bubble-me code { font-family: var(--mono); font-size: 13px; background: rgba(120, 120, 128, 0.16); padding: 1px 5px; border-radius: 5px; }
+  .bubble-me code { background: rgba(255, 255, 255, 0.22); }
+  .tool {
+    display: flex; align-items: center; gap: 10px; margin: 0 0 8px; padding: 10px 13px;
+    background: var(--card); border-radius: 13px; font-size: 13px;
+  }
+  .tool .tname { color: var(--blue); font-weight: 600; }
+  .tool .tpath { color: var(--faint); font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool .tmeta { margin-left: auto; color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+  .approve {
+    background: var(--card); border-radius: 16px; padding: 15px; margin: 4px 0 10px;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.07);
+  }
+  .approve-kicker { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--orange); margin-bottom: 6px; }
+  .approve h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+  .approve p { margin: 0 0 12px; font-size: 13.5px; color: var(--muted); }
+  .cmd {
+    font-family: var(--mono); font-size: 12.5px; background: var(--bg); border-radius: 9px;
+    padding: 10px 12px; color: #3a3a3c; margin-bottom: 12px; overflow-x: auto; white-space: pre;
+  }
+  .approve-actions { display: flex; flex-direction: column; gap: 8px; }
+  .btn-fill {
+    background: var(--blue); color: #fff; font-size: 16px; font-weight: 600;
+    padding: 12px; border-radius: 12px;
+  }
+  .btn-tint { background: var(--fill); color: var(--text); font-size: 16px; font-weight: 600; padding: 12px; border-radius: 12px; }
+  .done { display: flex; align-items: center; gap: 7px; font-size: 14px; color: #248a3d; font-weight: 500; }
+
+  .composer {
+    display: flex; align-items: flex-end; gap: 9px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(249, 249, 251, 0.92); backdrop-filter: blur(20px) saturate(180%);
+    border-top: 0.5px solid var(--sep);
+  }
+  .composer textarea {
+    flex: 1; font: inherit; font-size: 15.5px; resize: none; outline: none;
+    background: #fff; border: 0.5px solid var(--sep); border-radius: 19px; padding: 9px 14px;
+    max-height: 110px; line-height: 1.4; color: var(--text);
+  }
+  .composer textarea::placeholder { color: #b0b0b5; }
+  .send {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: #fff;
+    display: grid; place-items: center; flex: none; transition: transform 0.12s, opacity 0.15s;
+  }
+  .send:active { transform: scale(0.9); }
+  .send:disabled { opacity: 0.35; }
+  .send svg { width: 17px; height: 17px; }
+
+  /* login */
+  .login { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 26px 70px; text-align: center; }
+  .login .logo {
+    width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 20px;
+    background: linear-gradient(160deg, #4a4a4f, #1c1c1e);
+    display: grid; place-items: center; color: #fff; font-size: 34px; font-weight: 700;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  }
+  .login h1 { margin: 0 0 4px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+  .login p { margin: 0 0 26px; font-size: 14px; color: var(--faint); }
+  .login input {
+    width: 100%; font: inherit; font-size: 16px; text-align: center; padding: 13px 14px;
+    border-radius: 12px; border: 0.5px solid var(--sep); background: #fff; outline: none; margin-bottom: 10px;
+  }
+  .login input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12); }
+  .login .btn-fill { width: 100%; border-radius: 12px; }
+</style>
+</head>
+<body>
+<div class="stage"><div class="phone" id="app"></div></div>
+<script>
+const DATA = {
+  projects: [
+    {
+      name: 'PLM',
+      worktrees: [
+        {
+          branch: 'feature/folder-upload',
+          tasks: [
+            { id: 't1', title: '新建任务：导入 PK2C_全套.xlsx 更新零件属性', agent: 'claude', state: 'running', detail: '正在比对 Excel 与 EBOM 的零件清单', time: '刚刚' },
+            { id: 't2', title: '文件夹上传下载改造方案', agent: 'claude', state: 'attention', detail: '等待确认：是否排除副本零件？', time: '2 分钟前' },
+            { id: 't3', title: '表头文字被遮挡修复（流程审批页）', agent: 'claude', state: 'idle', detail: '已完成并推送成功', time: '4 小时前' }
+          ]
+        },
+        {
+          branch: 'master',
+          tasks: [
+            { id: 't4', title: '整车配置销售地区保存后消失问题', agent: 'claude', state: 'idle', detail: '瓶颈在 N+1 查询，已定位到接口', time: '1 天前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'FCP',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't5', title: '测速改为测 FCP 链路速度而非 TCP', agent: 'claude', state: 'running', detail: '正在修改 src/net/probe.rs', time: '刚刚' },
+            { id: 't6', title: '链路测试底部说明文字精简', agent: 'codex', state: 'idle', detail: 'v0.0.5 已发布', time: '28 分钟前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'orca',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't7', title: '安卓端配对后重连一直失败的原因分析', agent: 'claude', state: 'idle', detail: '已定位：128 连接上限被占满', time: '1 小时前' }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+const TRANSCRIPT = [
+  { kind: 'user', text: '把 Excel 导入改成只更新原始零件（copy_type=0），副本跳过。' },
+  { kind: 'assistant', text: '明白。现在的过滤条件在 <code>BomImportService#syncFromExcel</code> 里，加一个 copy_type 判断即可。' },
+  { kind: 'tool', name: 'Read', target: 'backend/bom-service/…/BomImportService.java' },
+  { kind: 'tool', name: 'Edit', target: 'BomImportService.java', meta: '+12 −3' },
+  { kind: 'assistant', text: '改好了，测试 12 项全过：' },
+  { kind: 'tool', name: 'Bash', target: './mvnw -q -pl bom-service test', meta: '12 passed · 8.4s' },
+  { kind: 'approval', title: '要推送到 master 吗？', desc: '工作树干净，12 项测试通过。', command: 'git push origin master' },
+  { kind: 'assistant', text: '确认后我就推送，并同步更新 CHANGELOG。' }
+]
+
+const state = { screen: 'board', taskId: null, filter: 'all', approved: false, sent: [] }
+const app = document.getElementById('app')
+const allTasks = DATA.projects.flatMap((p) => p.worktrees.flatMap((w) => w.tasks))
+const current = () => allTasks.find((t) => t.id === state.taskId) || allTasks[0]
+const labels = { running: '进行中', attention: '待处理', idle: '空闲' }
+const glyph = { claude: 'C', codex: 'X', grok: 'G' }
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+
+function board() {
+  const counts = { all: allTasks.length, running: allTasks.filter((t) => t.state === 'running').length, attention: allTasks.filter((t) => t.state === 'attention').length }
+  const keep = (t) => state.filter === 'all' || t.state === state.filter
+  const groups = DATA.projects
+    .map((p) => ({ name: p.name, worktrees: p.worktrees.map((w) => ({ ...w, tasks: w.tasks.filter(keep) })).filter((w) => w.tasks.length) }))
+    .filter((p) => p.worktrees.length)
+
+  return `<div class="screen">
+    <header class="big">
+      <div class="big-row">
+        <h1>Orca</h1>
+        <span class="status-pill"><i></i>已连接</span>
+      </div>
+      <p>3 个项目 · ${allTasks.length} 个任务 · 2 个进行中</p>
+    </header>
+    <div class="seg">
+      ${['all', 'running', 'attention'].map((k) => `<button class="${state.filter === k ? 'on' : ''}" data-filter="${k}">${{ all: '全部', running: '进行中', attention: '待处理' }[k]}</button>`).join('')}
+    </div>
+    <div class="scroll">
+      ${groups.map((p) => `
+        <section class="sec">
+          <div class="sec-head">${esc(p.name)}<span>${p.worktrees.reduce((n, w) => n + w.tasks.length, 0)} 个任务</span></div>
+          ${p.worktrees.map((w) => `
+            <div class="card">
+              <div class="wt-head"><span class="bi">⑂</span>${esc(w.branch)}<button data-new="1">新建</button></div>
+              ${w.tasks.map((t) => `
+                <button class="row" data-task="${t.id}">
+                  <span class="tile ${t.state}">${glyph[t.agent] || 'A'}</span>
+                  <span class="row-body">
+                    <span class="row-title">${esc(t.title)}</span>
+                    <span class="row-sub">
+                      <span class="row-detail">${esc(t.detail)}</span>
+                      ${t.state === 'running' ? '<span class="spinner"></span>' : ''}
+                      <span class="row-time">${esc(t.time)}</span>
+                    </span>
+                  </span>
+                </button>`).join('')}
+            </div>
+            <div style="height:12px"></div>`).join('')}
+        </section>`).join('')}
+      ${groups.length ? '' : '<p class="empty">这个筛选下没有任务</p>'}
+    </div>
+  </div>`
+}
+
+function thread() {
+  const t = current()
+  const items = TRANSCRIPT.map((item, i) => {
+    if (item.kind === 'user') return `<div class="blk"><div class="who">你</div><div class="bubble-me">${esc(item.text)}</div></div>`
+    if (item.kind === 'assistant') {
+      const lead = i === TRANSCRIPT.findIndex((x) => x.kind === 'assistant') ? `<div class="who">${esc(t.agent)}</div>` : ''
+      return `<div class="blk">${lead}<div class="bubble-ai">${item.text.replace(/<code>(.*?)<\/code>/g, '<code>$1</code>')}</div></div>`
+    }
+    if (item.kind === 'tool') return `<div class="blk"><div class="tool"><span class="tname">${esc(item.name)}</span><span class="tpath">${esc(item.target)}</span>${item.meta ? `<span class="tmeta">${esc(item.meta)}</span>` : ''}</div></div>`
+    if (item.kind === 'approval') {
+      if (t.state !== 'attention') return ''
+      return `<div class="blk"><div class="approve">
+        <div class="approve-kicker">● 需要批准</div>
+        <h3>${esc(item.title)}</h3><p>${esc(item.desc)}</p>
+        <div class="cmd">${esc(item.command)}</div>
+        ${state.approved
+          ? '<div class="done">✓ 已允许，正在执行</div>'
+          : `<div class="approve-actions"><button class="btn-fill" data-approve="1">允许</button><button class="btn-tint" data-deny="1">拒绝</button></div>`}
+      </div></div>`
+    }
+    return ''
+  }).join('')
+  const extra = state.sent.map((text) => `<div class="blk"><div class="who">你</div><div class="bubble-me">${esc(text)}</div></div>`).join('')
+  return items + extra
+}
+
+function task() {
+  const t = current()
+  const running = t.state === 'running'
+  return `<div class="screen">
+    <header class="navbar">
+      <button class="nav-back" data-go="board"><span>‹</span>Orca</button>
+      <div class="nav-center">${esc(t.title)}</div>
+      ${running ? '<button class="nav-end" data-stop="1">停止</button>' : ''}
+    </header>
+    <div class="task-meta-row"><span class="dot ${t.state}"></span>${esc(t.agent)} · ${labels[t.state]} · ${esc(t.time)}</div>
+    <div class="thread" id="thread">${thread()}</div>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="回复这个任务…"></textarea>
+      <button class="send" data-send="1" aria-label="发送">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </button>
+    </div>
+  </div>`
+}
+
+function login() {
+  return `<div class="screen">
+    <div class="login">
+      <div class="logo">O</div>
+      <h1>Orca</h1>
+      <p>查看并回复家里电脑上的任务</p>
+      <input id="pw" type="password" placeholder="密码" autocomplete="current-password" />
+      <button class="btn-fill" data-go="board">登录</button>
+    </div>
+  </div>`
+}
+
+function render() {
+  app.innerHTML = state.screen === 'board' ? board() : state.screen === 'task' ? task() : login()
+  if (state.screen === 'task') {
+    const box = document.getElementById('thread')
+    if (box) box.scrollTop = box.scrollHeight
+    const input = document.getElementById('input')
+    if (input) {
+      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(110, input.scrollHeight) + 'px' })
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() })
+    }
+  }
+}
+
+function send() {
+  const input = document.getElementById('input')
+  if (!input || !input.value.trim()) return
+  state.sent.push(input.value.trim())
+  input.value = ''
+  render()
+}
+
+app.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-task],[data-go],[data-filter],[data-approve],[data-deny],[data-send],[data-stop],[data-new]')
+  if (!el) return
+  if (el.dataset.task) { state.taskId = el.dataset.task; state.screen = 'task'; state.approved = false; state.sent = []; render(); return }
+  if (el.dataset.go === 'board') { state.screen = 'board'; render(); return }
+  if (el.dataset.filter) { state.filter = el.dataset.filter; render(); return }
+  if (el.dataset.approve) { state.approved = true; render(); return }
+  if (el.dataset.deny) { state.screen = 'board'; render(); return }
+  if (el.dataset.send) { send(); return }
+  if (el.dataset.stop) { current().state = 'idle'; render(); return }
+  if (el.dataset.new) { state.taskId = 't2'; state.screen = 'task'; render(); return }
+})
+
+render()
+</script>
+</body>
+</html>

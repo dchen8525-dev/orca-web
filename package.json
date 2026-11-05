@@ -1,0 +1,35 @@
+{
+  "name": "orca-web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Phone-friendly web view for a desktop Orca runtime (view projects/tasks, reply, create, cancel)",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "phase0": "node scripts/phase0-smoke.ts",
+    "phase0:envelope": "node scripts/phase0-mutation-envelope.ts",
+    "phase0:write": "node scripts/phase0-write-cycle.ts",
+    "gateway": "node apps/gateway/src/main.ts",
+    "server": "node apps/server/src/main.ts",
+    "hash-password": "node scripts/hash-password.ts",
+    "dev:hub": "node scripts/dev-hub.ts",
+    "dev:server-check": "node scripts/dev-server-check.ts",
+    "web:build": "vite build apps/web",
+    "web:typecheck": "tsc -p apps/web/tsconfig.json"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

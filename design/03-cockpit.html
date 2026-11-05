@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>03 · Cockpit — orca-web</title>
+<style>
+  :root {
+    --bg: #060a0d;
+    --panel: #0a1015;
+    --panel-2: #0d151b;
+    --line: #17262f;
+    --line-2: #21363f;
+    --text: #d8e6e2;
+    --muted: #75918c;
+    --faint: #4d6663;
+    --green: #35e0a1;
+    --amber: #ffb454;
+    --red: #ff6b6b;
+    --cyan: #57c7e3;
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #030506; color: var(--text); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  .stage { min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  .phone {
+    position: relative; display: flex; flex-direction: column; width: 100%; max-width: 390px;
+    height: 100dvh; background: var(--bg); overflow: hidden;
+    background-image:
+      radial-gradient(90% 50% at 50% -10%, rgba(53, 224, 161, 0.07), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 3px);
+  }
+  @media (min-width: 520px) {
+    .stage { background: radial-gradient(70% 60% at 50% 0%, #0a1519, #030506 70%); }
+    .phone { height: 844px; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 40px 90px rgba(0, 0, 0, 0.7); }
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .screen { display: flex; flex-direction: column; height: 100%; animation: boot 0.3s ease both; }
+  @keyframes boot { from { opacity: 0; filter: brightness(1.6); } to { opacity: 1; filter: none; } }
+
+  .mono { font-family: var(--mono); }
+  .sysbar {
+    display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 14px;
+    border-bottom: 1px solid var(--line); font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.1em; color: var(--faint); text-transform: uppercase;
+    background: #050a0d;
+  }
+  .sysbar .name { color: var(--green); }
+  .sysbar .sep { color: #22343c; }
+  .sysbar .clock { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .blink { animation: blink 1.2s steps(2, start) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .bar {
+    display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px;
+  }
+  .bar h1 {
+    margin: 0; font-family: var(--mono); font-size: 17px; font-weight: 600;
+    letter-spacing: 0.14em; color: var(--text);
+  }
+  .bar .live { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--green); }
+  .bar .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .bar .signout { margin-left: auto; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--faint); }
+
+  .tabs { display: flex; gap: 6px; padding: 0 14px 10px; }
+  .tab {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); border: 1px solid var(--line); padding: 5px 9px; border-radius: 3px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .tab.on { color: var(--green); border-color: rgba(53, 224, 161, 0.45); background: rgba(53, 224, 161, 0.08); }
+  .tab b { margin-left: 5px; font-weight: 500; opacity: 0.75; }
+
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px calc(20px + env(safe-area-inset-bottom)); }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  .panel { position: relative; border: 1px solid var(--line); background: var(--panel); margin-bottom: 12px; }
+  .panel::before, .panel::after {
+    content: ''; position: absolute; width: 7px; height: 7px; border-color: var(--line-2); border-style: solid;
+  }
+  .panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+  .panel::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+  .ph {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-bottom: 1px solid var(--line); background: var(--panel-2);
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  .ph .tick { color: var(--green); }
+  .ph .right { margin-left: auto; color: var(--faint); letter-spacing: 0.06em; }
+  .ph button { color: var(--green); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; }
+
+  .wt { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-bottom: 1px solid #111d24;
+    font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .wt .branch { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wt button { margin-left: auto; color: var(--green); font-size: 12px; padding: 0 2px; }
+
+  .row {
+    display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center;
+    width: 100%; text-align: left; padding: 10px; border-bottom: 1px solid #111d24;
+    transition: background 0.12s;
+  }
+  .row:last-child { border-bottom: 0; }
+  .row:hover, .row:active { background: rgba(53, 224, 161, 0.045); }
+  .st {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 0; text-align: center; border: 1px solid var(--line-2); color: var(--faint);
+  }
+  .st.running { color: var(--green); border-color: rgba(53, 224, 161, 0.45); background: rgba(53, 224, 161, 0.07); }
+  .st.attention { color: var(--amber); border-color: rgba(255, 180, 84, 0.45); background: rgba(255, 180, 84, 0.07); }
+  .r-main { min-width: 0; }
+  .r-title { font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r-detail { font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .r-time { font-family: var(--mono); font-size: 10px; color: var(--faint); white-space: nowrap; }
+  .bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; margin-top: 5px; }
+  .bars i { width: 2px; background: var(--green); opacity: 0.65; animation: eq 1.1s ease-in-out infinite; }
+  .bars i:nth-child(2) { animation-delay: 0.15s; }
+  .bars i:nth-child(3) { animation-delay: 0.3s; }
+  .bars i:nth-child(4) { animation-delay: 0.45s; }
+  .bars i:nth-child(5) { animation-delay: 0.6s; }
+  @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 11px; } }
+  .empty { padding: 50px 16px; text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; }
+
+  /* task */
+  .nav {
+    display: flex; align-items: center; gap: 9px; padding: 12px 12px 10px;
+    border-bottom: 1px solid var(--line); background: #050a0d;
+  }
+  .nav .back { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--muted); padding: 4px 6px 4px 0; }
+  .nav .crumb { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav .stop {
+    margin-left: auto; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
+    color: var(--red); border: 1px solid rgba(255, 107, 107, 0.4); padding: 5px 9px; border-radius: 3px;
+    background: rgba(255, 107, 107, 0.06);
+  }
+  .head { padding: 12px 14px 14px; border-bottom: 1px solid var(--line); }
+  .head h2 { margin: 0 0 8px; font-size: 16px; line-height: 1.35; font-weight: 600; }
+  .head .meta { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .head .meta span { border: 1px solid var(--line); padding: 2px 6px; border-radius: 3px; }
+  .head .meta .run { color: var(--green); border-color: rgba(53, 224, 161, 0.4); }
+  .head .meta .wait { color: var(--amber); border-color: rgba(255, 180, 84, 0.4); }
+
+  .thread { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 14px 6px; }
+  .thread::-webkit-scrollbar { width: 0; }
+  .blk { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; margin-bottom: 14px; animation: boot 0.25s ease both; }
+  .blk > div { min-width: 0; }
+  .gutter { font-family: var(--mono); font-size: 12px; color: var(--faint); line-height: 1.6; text-align: center; }
+  .blk.you .gutter { color: var(--green); }
+  .who { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
+  .blk.you .who { color: var(--green); }
+  .say { font-size: 14px; line-height: 1.62; color: #c9d9d5; }
+  .say code { font-family: var(--mono); font-size: 12px; color: var(--cyan); background: rgba(87, 199, 227, 0.08); padding: 1px 5px; border-radius: 2px; }
+  .tool {
+    display: flex; align-items: baseline; gap: 8px; padding: 7px 9px; margin-bottom: 8px;
+    border: 1px solid var(--line); background: var(--panel); font-family: var(--mono); font-size: 11px;
+    overflow: hidden;
+  }
+  .tool .tag { flex: none; color: var(--cyan); letter-spacing: 0.08em; text-transform: uppercase; }
+  .tool .target { flex: 1; min-width: 0; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool .meta { flex: none; margin-left: auto; color: var(--faint); white-space: nowrap; }
+  .blk.wide { grid-template-columns: 1fr; }
+  .confirm { border: 1px solid rgba(255, 180, 84, 0.4); background: linear-gradient(180deg, rgba(255, 180, 84, 0.07), rgba(255, 180, 84, 0.02)); padding: 10px 11px; margin-bottom: 10px; }
+  .confirm .kicker { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin-bottom: 5px; }
+  .confirm h4 { margin: 0 0 3px; font-size: 13.5px; font-weight: 600; }
+  .confirm p { margin: 0 0 9px; font-size: 12px; color: var(--muted); }
+  .confirm .cmd { font-family: var(--mono); font-size: 11.5px; color: #ffd9a3; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 180, 84, 0.2); padding: 7px 9px; margin-bottom: 10px; overflow-x: auto; white-space: pre; }
+  .confirm .acts { display: flex; gap: 8px; }
+  .confirm button { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 12px; border-radius: 3px; }
+  .confirm .allow { background: var(--amber); color: #241500; font-weight: 700; }
+  .confirm .deny { border: 1px solid var(--line-2); color: var(--muted); }
+  .confirm .ok { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--green); }
+
+  .composer { display: flex; align-items: center; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #050a0d; }
+  .prompt-char { font-family: var(--mono); font-size: 14px; color: var(--green); }
+  .composer input {
+    flex: 1; font-family: var(--mono); font-size: 12.5px; color: var(--text); background: transparent;
+    border: 0; outline: none; padding: 6px 0; min-width: 0;
+  }
+  .composer input::placeholder { color: #35504c; }
+  .composer .send {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #05100c; background: var(--green); padding: 7px 11px; border-radius: 3px; font-weight: 700;
+  }
+  .composer .send:disabled { opacity: 0.35; }
+
+  /* login */
+  .login { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px 60px; }
+  .login .logo { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; color: var(--green); margin-bottom: 14px; }
+  .login h1 { margin: 0 0 6px; font-family: var(--mono); font-size: 24px; letter-spacing: 0.16em; font-weight: 600; }
+  .login p { margin: 0 0 26px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--faint); }
+  .login input {
+    width: 100%; font-family: var(--mono); font-size: 13px; letter-spacing: 0.1em; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line-2); padding: 12px; outline: none; margin-bottom: 10px;
+  }
+  .login input:focus { border-color: rgba(53, 224, 161, 0.55); box-shadow: 0 0 0 3px rgba(53, 224, 161, 0.08); }
+  .login .go { width: 100%; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; background: var(--green); color: #05100c; font-weight: 700; padding: 12px; }
+</style>
+</head>
+<body>
+<div class="stage"><div class="phone" id="app"></div></div>
+<script>
+const DATA = {
+  projects: [
+    {
+      name: 'PLM',
+      worktrees: [
+        {
+          branch: 'feature/folder-upload',
+          tasks: [
+            { id: 't1', title: '新建任务：导入 PK2C_全套.xlsx 更新零件属性', agent: 'claude', state: 'running', detail: '正在比对 Excel 与 EBOM 的零件清单', time: '刚刚' },
+            { id: 't2', title: '文件夹上传下载改造方案', agent: 'claude', state: 'attention', detail: '等待确认：是否排除副本零件？', time: '2 分钟前' },
+            { id: 't3', title: '表头文字被遮挡修复（流程审批页）', agent: 'claude', state: 'idle', detail: '已完成并推送成功', time: '4 小时前' }
+          ]
+        },
+        {
+          branch: 'master',
+          tasks: [
+            { id: 't4', title: '整车配置销售地区保存后消失问题', agent: 'claude', state: 'idle', detail: '瓶颈在 N+1 查询，已定位到接口', time: '1 天前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'FCP',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't5', title: '测速改为测 FCP 链路速度而非 TCP', agent: 'claude', state: 'running', detail: '正在修改 src/net/probe.rs', time: '刚刚' },
+            { id: 't6', title: '链路测试底部说明文字精简', agent: 'codex', state: 'idle', detail: 'v0.0.5 已发布', time: '28 分钟前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'orca',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't7', title: '安卓端配对后重连一直失败的原因分析', agent: 'claude', state: 'idle', detail: '已定位：128 连接上限被占满', time: '1 小时前' }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+const TRANSCRIPT = [
+  { kind: 'user', text: '把 Excel 导入改成只更新原始零件（copy_type=0），副本跳过。' },
+  { kind: 'assistant', text: '明白。现在的过滤条件在 <code>BomImportService#syncFromExcel</code> 里，加一个 copy_type 判断即可。' },
+  { kind: 'tool', name: 'read', target: 'backend/bom-service/…/BomImportService.java' },
+  { kind: 'tool', name: 'edit', target: 'BomImportService.java', meta: '+12 −3' },
+  { kind: 'assistant', text: '改好了，测试 12 项全过：' },
+  { kind: 'tool', name: 'bash', target: './mvnw -q -pl bom-service test', meta: '12 passed · 8.4s' },
+  { kind: 'approval', title: '要推送到 master 吗？', desc: '工作树干净，12 项测试通过。', command: 'git push origin master' },
+  { kind: 'assistant', text: '确认后我就推送，并同步更新 CHANGELOG。' }
+]
+
+const state = { screen: 'board', taskId: null, filter: 'all', approved: false, sent: [] }
+const app = document.getElementById('app')
+const allTasks = DATA.projects.flatMap((p) => p.worktrees.flatMap((w) => w.tasks))
+const current = () => allTasks.find((t) => t.id === state.taskId) || allTasks[0]
+const labels = { running: 'RUN', attention: 'WAIT', idle: 'IDLE' }
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+
+function board() {
+  const counts = { all: allTasks.length, running: allTasks.filter((t) => t.state === 'running').length, attention: allTasks.filter((t) => t.state === 'attention').length }
+  const keep = (t) => state.filter === 'all' || t.state === state.filter
+  const groups = DATA.projects
+    .map((p) => ({ name: p.name, worktrees: p.worktrees.map((w) => ({ ...w, tasks: w.tasks.filter(keep) })) }))
+    .map((p) => ({ ...p, worktrees: p.worktrees.filter((w) => w.tasks.length) }))
+    .filter((p) => p.worktrees.length)
+
+  return `<div class="screen">
+    <div class="sysbar">
+      <span class="name">ORCA-WEB</span><span class="sep">│</span>
+      <span>GW 1.4.249</span><span class="sep">│</span>
+      <span style="color:var(--green)">● LINKED</span>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+    <div class="bar">
+      <h1>任务</h1>
+      <span class="live"><i></i>LIVE</span>
+      <button class="signout" data-go="login">EXIT</button>
+    </div>
+    <div class="tabs">
+      ${['all', 'running', 'attention'].map((k) => `<button class="tab ${state.filter === k ? 'on' : ''}" data-filter="${k}">${{ all: 'ALL', running: 'RUN', attention: 'WAIT' }[k]}<b>${counts[k]}</b></button>`).join('')}
+    </div>
+    <div class="scroll">
+      ${groups.map((p) => `
+        <section class="panel">
+          <div class="ph"><span class="tick">▍</span>${esc(p.name)}<span class="right">${p.worktrees.reduce((n, w) => n + w.tasks.length, 0)} ${p.worktrees.reduce((n, w) => n + w.tasks.length, 0) === 1 ? 'TASK' : 'TASKS'}</span></div>
+          ${p.worktrees.map((w) => `
+            <div class="wt"><span>⑂</span><span class="branch">${esc(w.branch)}</span><button data-new="1">＋NEW</button></div>
+            ${w.tasks.map((t) => `
+              <button class="row" data-task="${t.id}">
+                <span class="st ${t.state}">${labels[t.state]}</span>
+                <span class="r-main">
+                  <span class="r-title">${esc(t.title)}</span>
+                  <span class="r-detail">${esc(t.detail)}</span>
+                  ${t.state === 'running' ? '<span class="bars"><i></i><i></i><i></i><i></i><i></i></span>' : ''}
+                </span>
+                <span class="r-time">${esc(t.time)}</span>
+              </button>`).join('')}
+          `).join('')}
+        </section>`).join('')}
+      ${groups.length ? '' : '<p class="empty">NO TASKS IN THIS FILTER</p>'}
+    </div>
+  </div>`
+}
+
+function thread() {
+  const t = current()
+  const items = TRANSCRIPT.map((item, i) => {
+    if (item.kind === 'user') return `<div class="blk you"><div class="gutter">›</div><div><div class="who">you</div><div class="say">${esc(item.text)}</div></div></div>`
+    if (item.kind === 'assistant') {
+      const lead = i === TRANSCRIPT.findIndex((x) => x.kind === 'assistant') ? `<div class="who">${esc(t.agent)}</div>` : ''
+      return `<div class="blk"><div class="gutter">⏺</div><div>${lead}<div class="say">${item.text.replace(/<code>(.*?)<\/code>/g, '<code>$1</code>')}</div></div></div>`
+    }
+    if (item.kind === 'tool') return `<div class="blk"><div class="gutter">▸</div><div><div class="tool"><span class="tag">${esc(item.name)}</span><span class="target">${esc(item.target)}</span>${item.meta ? `<span class="meta">${esc(item.meta)}</span>` : ''}</div></div></div>`
+    if (item.kind === 'approval') {
+      if (t.state !== 'attention') return ''
+      return `<div class="blk wide"><div class="confirm">
+        <div class="kicker">CONFIRM REQUIRED</div>
+        <h4>${esc(item.title)}</h4><p>${esc(item.desc)}</p>
+        <div class="cmd">${esc(item.command)}</div>
+        ${state.approved ? '<div class="ok">● ALLOWED — RUNNING</div>'
+          : `<div class="acts"><button class="allow" data-approve="1">ALLOW</button><button class="deny" data-deny="1">DENY</button></div>`}
+      </div></div>`
+    }
+    return ''
+  }).join('')
+  const extra = state.sent.map((text) => `<div class="blk you"><div class="gutter">›</div><div><div class="who">you</div><div class="say">${esc(text)}</div></div></div>`).join('')
+  return items + extra
+}
+
+function task() {
+  const t = current()
+  const running = t.state === 'running'
+  return `<div class="screen">
+    <div class="sysbar"><span class="name">ORCA-WEB</span><span class="sep">│</span><span>TASK</span><span class="clock" id="clock">--:--:--</span></div>
+    <div class="nav">
+      <button class="back" data-go="board">‹ BACK</button>
+      <span class="crumb">${esc(t.agent)} / ${esc(t.id)}</span>
+      ${running ? '<button class="stop" data-stop="1">STOP</button>' : ''}
+    </div>
+    <div class="head">
+      <h2>${esc(t.title)}</h2>
+      <div class="meta">
+        <span class="${t.state === 'running' ? 'run' : t.state === 'attention' ? 'wait' : ''}">${labels[t.state]}</span><span>${esc(t.agent)}</span><span>${esc(t.time)}</span>
+      </div>
+    </div>
+    <div class="thread" id="thread">${thread()}</div>
+    <div class="composer">
+      <span class="prompt-char">❯</span>
+      <input id="input" placeholder="回复这个任务…" />
+      <button class="send" data-send="1">SEND</button>
+    </div>
+  </div>`
+}
+
+function login() {
+  return `<div class="screen">
+    <div class="sysbar"><span class="name">ORCA-WEB</span><span class="sep">│</span><span>SECURE SHELL</span><span class="clock" id="clock">--:--:--</span></div>
+    <div class="login">
+      <div class="logo">// LOCAL RUNTIME</div>
+      <h1>ORCA</h1>
+      <p>查看并回复家里电脑上的任务</p>
+      <input id="pw" type="password" placeholder="PASSWORD" autocomplete="current-password" />
+      <button class="go" data-go="board">CONNECT</button>
+    </div>
+  </div>`
+}
+
+function render() {
+  app.innerHTML = state.screen === 'board' ? board() : state.screen === 'task' ? task() : login()
+  tickClock()
+  if (state.screen === 'task') {
+    const box = document.getElementById('thread')
+    if (box) box.scrollTop = box.scrollHeight
+    const input = document.getElementById('input')
+    if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send() })
+  }
+}
+
+function tickClock() {
+  const el = document.getElementById('clock')
+  if (el) el.textContent = new Date().toTimeString().slice(0, 8)
+}
+setInterval(tickClock, 1000)
+
+function send() {
+  const input = document.getElementById('input')
+  if (!input || !input.value.trim()) return
+  state.sent.push(input.value.trim())
+  input.value = ''
+  render()
+}
+
+app.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-task],[data-go],[data-filter],[data-approve],[data-deny],[data-send],[data-stop],[data-new]')
+  if (!el) return
+  if (el.dataset.task) { state.taskId = el.dataset.task; state.screen = 'task'; state.approved = false; state.sent = []; render(); return }
+  if (el.dataset.go === 'board') { state.screen = 'board'; render(); return }
+  if (el.dataset.go === 'login') { state.screen = 'login'; render(); return }
+  if (el.dataset.filter) { state.filter = el.dataset.filter; render(); return }
+  if (el.dataset.approve) { state.approved = true; render(); return }
+  if (el.dataset.deny) { state.screen = 'board'; render(); return }
+  if (el.dataset.send) { send(); return }
+  if (el.dataset.stop) { current().state = 'idle'; render(); return }
+  if (el.dataset.new) { state.taskId = 't2'; state.screen = 'task'; render(); return }
+})
+
+render()
+</script>
+</body>
+</html>

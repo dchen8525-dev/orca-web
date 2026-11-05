@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>01 · Precision — orca-web</title>
+<style>
+  :root {
+    --bg: #08090a;
+    --panel: #0d0f10;
+    --raised: #121517;
+    --line: rgba(255, 255, 255, 0.07);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --text: #e8eaed;
+    --muted: #8a9099;
+    --faint: #5b6169;
+    --accent: #6e79d6;
+    --green: #4cb782;
+    --amber: #e0a44a;
+    --red: #e5534b;
+    --radius: 10px;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'PingFang SC',
+      'Microsoft YaHei', sans-serif;
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #050506;
+    color: var(--text);
+    font: 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage { min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  .phone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 390px;
+    height: 100dvh;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  @media (min-width: 520px) {
+    .stage { background: radial-gradient(80% 60% at 50% 0%, #12141a 0%, #050506 70%); }
+    .phone {
+      height: 844px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 30px;
+      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.6);
+    }
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .screen { display: flex; flex-direction: column; height: 100%; animation: fade 0.22s ease both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
+
+  /* top bar */
+  .top {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 54px;
+    padding: 0 18px;
+    background: rgba(8, 9, 10, 0.78);
+    backdrop-filter: blur(18px) saturate(140%);
+    border-bottom: 1px solid var(--line);
+  }
+  .mark {
+    width: 20px; height: 20px; border-radius: 6px;
+    background: linear-gradient(145deg, #8b95ff, #5a63c9);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+    flex: none;
+  }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .conn { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .conn i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(76, 183, 130, 0.15); }
+  .top-action { font-size: 12.5px; color: var(--faint); padding: 6px 2px; }
+  .top-action:hover { color: var(--muted); }
+
+  /* filters */
+  .filters { display: flex; gap: 18px; padding: 12px 18px 0; }
+  .filter {
+    position: relative; padding: 4px 0 10px; font-size: 12.5px; color: var(--faint);
+    letter-spacing: 0.01em; transition: color 0.15s;
+  }
+  .filter b { font-weight: 500; margin-left: 5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .filter.on { color: var(--text); }
+  .filter.on b { color: var(--accent); }
+  .filter.on::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--text);
+  }
+
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 24px; }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  .group { margin-top: 14px; }
+  .group-head {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 18px;
+    background: rgba(8, 9, 10, 0.86);
+    backdrop-filter: blur(14px);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .group-head span.count { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .wt { padding: 4px 0 2px; }
+  .wt-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 18px 6px; font-size: 12px; color: var(--muted);
+  }
+  .branch-icon { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+  .wt-new { margin-left: auto; color: var(--faint); font-size: 15px; line-height: 1; padding: 2px 4px; }
+  .wt-new:hover { color: var(--accent); }
+  .task {
+    display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: start;
+    width: 100%; text-align: left; padding: 12px 18px 13px;
+    border-top: 1px solid var(--line); transition: background 0.12s;
+  }
+  .task:hover { background: rgba(255, 255, 255, 0.025); }
+  .task:active { background: rgba(255, 255, 255, 0.045); }
+  .ring { margin-top: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .ring.running { background: var(--green); animation: pulse 1.8s ease-out infinite; }
+  .ring.attention { background: var(--amber); box-shadow: 0 0 0 3px rgba(224, 164, 74, 0.12); }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(76, 183, 130, 0.45); }
+    70% { box-shadow: 0 0 0 7px rgba(76, 183, 130, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(76, 183, 130, 0); }
+  }
+  .task-main { min-width: 0; }
+  .task-title {
+    display: block; font-size: 14.5px; font-weight: 550; letter-spacing: -0.005em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .task-detail {
+    display: block; margin-top: 3px; font-size: 12.5px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .task-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-top: 1px; }
+  .state { font-size: 11.5px; letter-spacing: 0.02em; color: var(--faint); }
+  .state.running { color: var(--green); }
+  .state.attention { color: var(--amber); }
+  .time { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .empty { padding: 60px 24px; text-align: center; color: var(--faint); font-size: 13px; }
+
+  /* task view */
+  .nav { display: flex; align-items: center; gap: 10px; height: 54px; padding: 0 14px 0 8px;
+    background: rgba(8,9,10,.82); backdrop-filter: blur(18px); border-bottom: 1px solid var(--line);
+    position: relative; z-index: 3; }
+  .back { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); font-size: 20px; }
+  .back:hover { background: rgba(255,255,255,.05); color: var(--text); }
+  .nav-title { min-width: 0; }
+  .nav-title h1 { margin: 0; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-title p { margin: 1px 0 0; font-size: 11.5px; color: var(--muted); }
+  .nav-right { margin-left: auto; display: flex; gap: 8px; }
+  .stop {
+    font-size: 12.5px; color: #ffb4ae; border: 1px solid rgba(229, 83, 75, 0.35);
+    background: rgba(229, 83, 75, 0.1); padding: 6px 11px; border-radius: 8px;
+  }
+  .stop:hover { background: rgba(229, 83, 75, 0.18); }
+  .progress { height: 1px; background: transparent; overflow: hidden; }
+  .progress.on::after {
+    content: ''; display: block; width: 40%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    animation: slide 1.6s linear infinite;
+  }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(350%); } }
+
+  .thread { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 20px 18px 8px; }
+  .thread::-webkit-scrollbar { width: 0; }
+  .blk { margin-bottom: 20px; animation: fade 0.25s ease both; }
+  .role { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+  .role.you { color: var(--accent); }
+  .body { font-size: 14.5px; line-height: 1.66; color: #dfe2e6; }
+  .body p { margin: 0 0 10px; }
+  .code {
+    margin: 10px 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: #0b0d0f; font-family: var(--mono); font-size: 12px; line-height: 1.6;
+    color: #b7c0cc; overflow-x: auto; white-space: pre;
+  }
+  .code b { color: #8b95ff; font-weight: 500; }
+  .code-inline {
+    font-family: var(--mono); font-size: 12.5px; color: #c3c9ff;
+    background: rgba(110, 121, 214, 0.12); border: 1px solid rgba(110, 121, 214, 0.18);
+    padding: 1px 5px; border-radius: 5px;
+  }
+  .approve .kicker {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--amber); margin-bottom: 7px;
+  }
+  .tool {
+    display: flex; align-items: center; gap: 9px; margin: 8px 0; padding: 9px 11px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    font-size: 12.5px; color: var(--muted);
+  }
+  .tool .tname { color: var(--accent); font-weight: 550; }
+  .tool .tpath { font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool .tmeta { margin-left: auto; color: var(--faint); font-size: 11px; white-space: nowrap; }
+  .approve {
+    margin: 12px 0; border: 1px solid rgba(224, 164, 74, 0.28); border-radius: 10px;
+    background: linear-gradient(180deg, rgba(224, 164, 74, 0.07), rgba(224, 164, 74, 0.02));
+    padding: 13px 14px;
+  }
+  .approve h3 { margin: 0 0 3px; font-size: 13.5px; font-weight: 600; }
+  .approve p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .cmd {
+    font-family: var(--mono); font-size: 12px; color: #e8d3ae; background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(224, 164, 74, 0.18); border-radius: 7px; padding: 9px 10px; margin-bottom: 11px;
+    overflow-x: auto; white-space: pre;
+  }
+  .approve-actions { display: flex; gap: 8px; }
+  .btn-primary {
+    background: var(--accent); color: #fff; font-size: 13px; font-weight: 550;
+    padding: 8px 15px; border-radius: 8px;
+  }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost {
+    font-size: 13px; color: var(--muted); border: 1px solid var(--line-strong);
+    padding: 8px 15px; border-radius: 8px;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.22); }
+  .resolved { font-size: 12.5px; color: var(--green); display: flex; align-items: center; gap: 6px; }
+
+  /* composer */
+  .composer {
+    position: relative; display: flex; align-items: flex-end; gap: 8px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: rgba(8, 9, 10, 0.9);
+    backdrop-filter: blur(18px);
+  }
+  .composer textarea {
+    flex: 1; resize: none; font: inherit; font-size: 14px; color: var(--text);
+    background: var(--raised); border: 1px solid var(--line-strong); border-radius: 10px;
+    padding: 10px 12px; max-height: 120px; line-height: 1.5; outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .composer textarea::placeholder { color: var(--faint); }
+  .composer textarea:focus { border-color: rgba(110, 121, 214, 0.65); box-shadow: 0 0 0 3px rgba(110, 121, 214, 0.12); }
+  .send {
+    width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent); color: #fff; flex: none; transition: opacity 0.15s, transform 0.1s;
+  }
+  .send:active { transform: scale(0.94); }
+  .send:disabled { opacity: 0.35; }
+  .send svg { width: 16px; height: 16px; }
+
+  /* login */
+  .login { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 30px 60px; }
+  .login .mark { width: 34px; height: 34px; border-radius: 10px; margin-bottom: 18px; }
+  .login h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+  .login p { margin: 0 0 28px; color: var(--muted); font-size: 13.5px; }
+  .login input {
+    width: 100%; font: inherit; font-size: 15px; color: var(--text); background: var(--raised);
+    border: 1px solid var(--line-strong); border-radius: 10px; padding: 13px 14px; outline: none;
+    margin-bottom: 10px; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .login input:focus { border-color: rgba(110, 121, 214, 0.7); box-shadow: 0 0 0 3px rgba(110, 121, 214, 0.12); }
+  .login .btn-primary { width: 100%; padding: 13px; border-radius: 10px; font-size: 14.5px; }
+  .login .hint { margin-top: 16px; font-size: 11.5px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="stage"><div class="phone" id="app"></div></div>
+<script>
+const DATA = {
+  projects: [
+    {
+      name: 'PLM',
+      worktrees: [
+        {
+          branch: 'feature/folder-upload',
+          tasks: [
+            { id: 't1', title: '新建任务：导入 PK2C_全套.xlsx 更新零件属性', agent: 'claude', state: 'running', detail: '正在比对 Excel 与 EBOM 的零件清单', time: '刚刚' },
+            { id: 't2', title: '文件夹上传下载改造方案', agent: 'claude', state: 'attention', detail: '等待确认：是否排除副本零件？', time: '2 分钟前' },
+            { id: 't3', title: '表头文字被遮挡修复（流程审批页）', agent: 'claude', state: 'idle', detail: '已完成并推送成功', time: '4 小时前' }
+          ]
+        },
+        {
+          branch: 'master',
+          tasks: [
+            { id: 't4', title: '整车配置销售地区保存后消失问题', agent: 'claude', state: 'idle', detail: '瓶颈在 N+1 查询，已定位到接口', time: '1 天前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'FCP',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't5', title: '测速改为测 FCP 链路速度而非 TCP', agent: 'claude', state: 'running', detail: '正在修改 src/net/probe.rs', time: '刚刚' },
+            { id: 't6', title: '链路测试底部说明文字精简', agent: 'codex', state: 'idle', detail: 'v0.0.5 已发布', time: '28 分钟前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'orca',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't7', title: '安卓端配对后重连一直失败的原因分析', agent: 'claude', state: 'idle', detail: '已定位：128 连接上限被占满', time: '1 小时前' }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+const TRANSCRIPT = [
+  { kind: 'user', text: '把 Excel 导入改成只更新原始零件（copy_type=0），副本跳过。' },
+  { kind: 'assistant', text: '明白。现在的过滤条件在 <code>BomImportService#syncFromExcel</code> 里，加一个 copy_type 判断即可。' },
+  { kind: 'tool', name: 'Read', target: 'backend/bom-service/…/BomImportService.java' },
+  { kind: 'tool', name: 'Edit', target: 'BomImportService.java', meta: '+12 −3' },
+  { kind: 'assistant', text: '改好了，测试 12 项全过：' },
+  { kind: 'tool', name: 'Bash', target: './mvnw -q -pl bom-service test', meta: '12 passed · 8.4s' },
+  { kind: 'approval', title: '要推送到 master 吗？', desc: '工作树干净，12 项测试通过。', command: 'git push origin master' },
+  { kind: 'assistant', text: '确认后我就推送，并同步更新 CHANGELOG。' }
+]
+
+const state = { screen: location.hash.startsWith('#/task') ? 'task' : location.hash === '#/login' ? 'login' : 'board', taskId: null, filter: 'all', approved: false, sent: [] }
+if (/^#\/task\//.test(location.hash)) state.taskId = location.hash.split('/')[2]
+if (!state.taskId && state.screen === 'task') state.screen = 'board'
+
+const app = document.getElementById('app')
+const allTasks = DATA.projects.flatMap((p) => p.worktrees.flatMap((w) => w.tasks))
+let current = allTasks.find((t) => t.id === state.taskId) || allTasks[0]
+const labels = { running: '进行中', attention: '待处理', idle: '空闲' }
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+
+function board() {
+  const counts = { all: allTasks.length, running: allTasks.filter((t) => t.state === 'running').length, attention: allTasks.filter((t) => t.state === 'attention').length }
+  const keep = (t) => state.filter === 'all' || t.state === state.filter
+  const groups = DATA.projects.map((p) => ({ name: p.name, worktrees: p.worktrees.map((w) => ({ ...w, tasks: w.tasks.filter(keep) })).filter((w) => w.tasks.length) })).filter((p) => p.worktrees.length)
+  return `<div class="screen">
+    <header class="top">
+      <div class="mark"></div>
+      <div class="brand">Orca</div>
+      <div class="conn"><i></i>已连接</div>
+      <button class="top-action" data-go="login">退出</button>
+    </header>
+    <div class="filters">
+      ${['all', 'running', 'attention'].map((k) => `<button class="filter ${state.filter === k ? 'on' : ''}" data-filter="${k}">${{ all: '全部', running: '进行中', attention: '待处理' }[k]}<b>${counts[k]}</b></button>`).join('')}
+    </div>
+    <div class="scroll">
+      ${groups.map((p) => `
+        <section class="group">
+          <div class="group-head">${esc(p.name)}<span class="count">${p.worktrees.reduce((n, w) => n + w.tasks.length, 0)} 个任务</span></div>
+          ${p.worktrees.map((w) => `
+            <div class="wt">
+              <div class="wt-head"><span class="branch-icon">⑂</span>${esc(w.branch)}<button class="wt-new" data-new="1" title="新建任务">＋</button></div>
+              ${w.tasks.map((t) => `
+                <button class="task" data-task="${t.id}">
+                  <span class="ring ${t.state}"></span>
+                  <span class="task-main">
+                    <span class="task-title">${esc(t.title)}</span>
+                    <span class="task-detail">${esc(t.detail)}</span>
+                  </span>
+                  <span class="task-meta">
+                    <span class="state ${t.state}">${labels[t.state]}</span>
+                    <span class="time">${esc(t.time)}</span>
+                  </span>
+                </button>`).join('')}
+            </div>`).join('')}
+        </section>`).join('')}
+      ${groups.length ? '' : '<p class="empty">这个筛选下没有任务</p>'}
+    </div>
+  </div>`
+}
+
+function thread() {
+  const items = TRANSCRIPT.map((item, i) => {
+    if (item.kind === 'user') return `<div class="blk"><div class="role you">You</div><div class="body"><p>${esc(item.text)}</p></div></div>`
+    if (item.kind === 'assistant') {
+      const lead = i === TRANSCRIPT.findIndex((x) => x.kind === 'assistant') ? `<div class="role">${esc(current.agent)}</div>` : ''
+      return `<div class="blk">${lead}<div class="body"><p>${item.text.replace(/<code>(.*?)<\/code>/g, '<span class="code-inline">$1</span>')}</p></div></div>`
+    }
+    if (item.kind === 'tool') return `<div class="blk"><div class="tool"><span class="tname">${esc(item.name)}</span><span class="tpath">${esc(item.target)}</span>${item.meta ? `<span class="tmeta">${esc(item.meta)}</span>` : ''}</div></div>`
+    if (item.kind === 'approval') {
+      if (current.state !== 'attention') return ''
+      return `<div class="blk"><div class="approve">
+        <div class="kicker">需要确认</div>
+        <h3>${esc(item.title)}</h3><p>${esc(item.desc)}</p>
+        <div class="cmd">${esc(item.command)}</div>
+        ${state.approved
+          ? `<div class="resolved">● 已允许，正在执行…</div>`
+          : `<div class="approve-actions"><button class="btn-primary" data-approve="1">允许</button><button class="btn-ghost" data-deny="1">拒绝</button></div>`}
+      </div></div>`
+    }
+    return ''
+  }).join('')
+  const extra = state.sent.map((text) => `<div class="blk"><div class="role you">You</div><div class="body"><p>${esc(text)}</p></div></div>`).join('')
+  return items + extra
+}
+
+function task() {
+  const running = current.state === 'running'
+  return `<div class="screen">
+    <header class="nav">
+      <button class="back" data-go="board" aria-label="返回">‹</button>
+      <div class="nav-title">
+        <h1>${esc(current.title)}</h1>
+        <p>${esc(current.agent)} · ${labels[current.state]} · ${esc(current.time)}</p>
+      </div>
+      <div class="nav-right">${running ? '<button class="stop" data-stop="1">停止</button>' : ''}</div>
+    </header>
+    <div class="progress ${running ? 'on' : ''}"></div>
+    <div class="thread" id="thread">${thread()}</div>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="回复这个任务…"></textarea>
+      <button class="send" data-send="1" aria-label="发送">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </button>
+    </div>
+  </div>`
+}
+
+function login() {
+  return `<div class="screen">
+    <div class="login">
+      <div class="mark"></div>
+      <h1>Orca</h1>
+      <p>查看并回复家里电脑上的任务</p>
+      <input id="pw" type="password" placeholder="密码" autocomplete="current-password" />
+      <button class="btn-primary" data-go="board">登录</button>
+      <div class="hint">单用户 · 仅本人可访问</div>
+    </div>
+  </div>`
+}
+
+function render() {
+  app.innerHTML = state.screen === 'board' ? board() : state.screen === 'task' ? task() : login()
+  if (state.screen === 'task') {
+    const box = document.getElementById('thread')
+    if (box) box.scrollTop = box.scrollHeight
+    const input = document.getElementById('input')
+    if (input) {
+      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(120, input.scrollHeight) + 'px' })
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() })
+    }
+  }
+}
+
+function send() {
+  const input = document.getElementById('input')
+  if (!input || !input.value.trim()) return
+  state.sent.push(input.value.trim())
+  input.value = ''
+  render()
+}
+
+app.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-task],[data-go],[data-filter],[data-approve],[data-deny],[data-send],[data-stop],[data-new]')
+  if (!el) return
+  if (el.dataset.task) { state.taskId = el.dataset.task; current = allTasks.find((t) => t.id === state.taskId) || current; state.screen = 'task'; state.approved = false; state.sent = []; render(); return }
+  if (el.dataset.go === 'board') { state.screen = 'board'; render(); return }
+  if (el.dataset.go === 'login') { state.screen = 'login'; render(); return }
+  if (el.dataset.filter) { state.filter = el.dataset.filter; render(); return }
+  if (el.dataset.approve) { state.approved = true; render(); return }
+  if (el.dataset.deny) { state.approved = false; state.screen = 'board'; render(); return }
+  if (el.dataset.send) { send(); return }
+  if (el.dataset.stop) { current.state = 'idle'; render(); return }
+  if (el.dataset.new) { state.screen = 'task'; state.taskId = 't2'; current = allTasks.find((t) => t.id === 't2') || current; render(); return }
+})
+
+window.addEventListener('hashchange', () => {})
+render()
+</script>
+</body>
+</html>

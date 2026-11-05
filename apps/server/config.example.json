@@ -1,0 +1,12 @@
+{
+  "host": "127.0.0.1",
+  "port": 8788,
+  "publicOrigin": "https://orca.example.com",
+  "gatewayKey": "share-this-with-the-gateway",
+  "passwordHash": "scrypt$16384$8$1$...$...",
+  "sessionTtlDays": 30,
+  "staticDir": "apps/web/dist",
+  "trustProxy": true,
+  "cookieSecure": true,
+  "sessionStorePath": "/var/lib/orca-web/sessions.json"
+}

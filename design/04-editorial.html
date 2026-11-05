@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>04 · Editorial — orca-web</title>
+<style>
+  :root {
+    --paper: #faf7f1;
+    --paper-2: #f3eee4;
+    --ink: #1c1a17;
+    --ink-soft: #4a453d;
+    --muted: #857c6e;
+    --faint: #a89e8e;
+    --rule: #e2dacd;
+    --rule-strong: #cfc5b4;
+    --accent: #a8492a;
+    --green: #3f6b52;
+    --serif: Georgia, 'Times New Roman', 'Songti SC', 'Source Han Serif SC', 'Noto Serif SC', SimSun, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #e6dfd2; color: var(--ink); font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+  .stage { min-height: 100dvh; display: flex; align-items: center; justify-content: center; }
+  .phone {
+    position: relative; display: flex; flex-direction: column; width: 100%; max-width: 390px;
+    height: 100dvh; overflow: hidden; background: var(--paper);
+    background-image: radial-gradient(120% 60% at 50% 0%, #fffdf9, var(--paper) 55%);
+  }
+  @media (min-width: 520px) {
+    .stage { background: radial-gradient(70% 60% at 50% 10%, #efe9de, #ded6c7 75%); }
+    .phone { height: 844px; border-radius: 14px; box-shadow: 0 30px 70px rgba(60, 48, 30, 0.28), 0 0 0 1px rgba(120, 100, 70, 0.18); }
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+  .screen { display: flex; flex-direction: column; height: 100%; animation: fade 0.35s ease both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .masthead { padding: 20px 22px 0; }
+  .kicker {
+    display: flex; align-items: center; gap: 8px;
+    font: 500 9.5px/1 var(--sans); letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+  }
+  .kicker .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--green); }
+  .kicker .right { margin-left: auto; letter-spacing: 0.14em; color: var(--faint); }
+  .title-row { display: flex; align-items: flex-end; justify-content: space-between; margin: 14px 0 2px; }
+  h1 {
+    margin: 0; font: 400 34px/1.1 var(--serif); letter-spacing: -0.01em;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+  .signout { font: 500 10px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); padding-bottom: 5px; }
+  .dek { margin: 8px 0 0; font: italic 14px/1.5 var(--serif); color: var(--muted); }
+  .rule { height: 1px; background: var(--rule); margin: 16px 22px 0; }
+  .rule.double { height: 3px; border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong); background: transparent; }
+
+  .filters { display: flex; gap: 18px; padding: 12px 22px 10px; }
+  .filters button {
+    font: 500 10px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint);
+    padding-bottom: 6px; border-bottom: 1px solid transparent;
+  }
+  .filters button.on { color: var(--ink); border-bottom-color: var(--ink); }
+  .filters b { font-weight: 500; margin-left: 4px; color: var(--accent); }
+
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 22px calc(26px + env(safe-area-inset-bottom)); }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  .project { margin-top: 22px; }
+  .project-head { display: flex; align-items: baseline; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--rule-strong); }
+  .project-head h2 { margin: 0; font: 400 19px/1.2 var(--serif); letter-spacing: 0.01em; }
+  .project-head .no { font: 400 10px/1 var(--mono); color: var(--faint); letter-spacing: 0.08em; }
+  .project-head .count { margin-left: auto; font: 400 10px/1 var(--mono); color: var(--faint); letter-spacing: 0.06em; }
+
+  .wt-line {
+    display: flex; align-items: center; gap: 8px; padding: 9px 0 5px;
+    font: 400 10.5px/1 var(--mono); color: var(--faint); letter-spacing: 0.03em;
+  }
+  .wt-line .br { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wt-line .new {
+    margin-left: auto; font: 500 9px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+  }
+
+  .task {
+    display: block; width: 100%; text-align: left; padding: 12px 0 13px;
+    border-bottom: 1px solid var(--rule); transition: opacity 0.15s;
+  }
+  .task:active { opacity: 0.6; }
+  .task .headline {
+    display: flex; gap: 10px; align-items: baseline;
+    font: 400 16.5px/1.38 var(--serif); letter-spacing: 0.005em;
+  }
+  .task .mark { flex: none; width: 11px; font: 400 13px/1.5 var(--serif); color: var(--faint); }
+  .task.run .mark { color: var(--green); }
+  .task.wait .mark { color: var(--accent); }
+  .task .body { min-width: 0; flex: 1; }
+  .task .line { margin: 4px 0 0 21px; font: 400 12.5px/1.5 var(--sans); color: var(--muted); }
+  .task .foot {
+    display: flex; align-items: center; gap: 8px; margin: 7px 0 0 21px;
+    font: 500 9px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint);
+  }
+  .task .foot .state { color: var(--muted); }
+  .task.run .foot .state { color: var(--green); }
+  .task.wait .foot .state { color: var(--accent); }
+  .task .foot .sep { color: var(--rule-strong); }
+  .task .foot .time { margin-left: auto; letter-spacing: 0.08em; text-transform: none; font-family: var(--mono); font-size: 9.5px; }
+  .task .foot .spin {
+    width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(63, 107, 82, 0.25);
+    border-top-color: var(--green); animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .colophon { margin-top: 26px; text-align: center; font: italic 12px/1.6 var(--serif); color: var(--faint); }
+  .empty { padding: 44px 0; text-align: center; font: italic 14px/1.6 var(--serif); color: var(--faint); }
+
+  /* detail */
+  .topnav { display: flex; align-items: center; padding: 16px 22px 12px; }
+  .topnav .back { font: 500 10px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .topnav .where { margin-left: auto; font: 400 10px/1 var(--mono); color: var(--faint); letter-spacing: 0.04em; }
+  .topnav .stop { margin-left: 14px; font: 500 10px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  .article-head { padding: 6px 22px 0; }
+  .article-head .eyebrow { font: 500 9.5px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
+  .article-head h2 { margin: 10px 0 12px; font: 400 26px/1.24 var(--serif); letter-spacing: -0.005em; }
+  .byline { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font: 400 11px/1 var(--sans); color: var(--muted); }
+  .byline .agent { font-weight: 600; letter-spacing: 0.04em; }
+  .byline .sep { color: var(--rule-strong); }
+  .byline .pill {
+    font: 500 9px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 3px 7px; border: 1px solid var(--rule-strong); color: var(--muted);
+  }
+  .byline .pill.on { color: var(--green); border-color: rgba(63, 107, 82, 0.4); background: rgba(63, 107, 82, 0.06); }
+  .byline .pill.wait { color: var(--accent); border-color: rgba(168, 73, 42, 0.35); background: rgba(168, 73, 42, 0.05); }
+
+  .thread { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 18px 22px 8px; }
+  .thread::-webkit-scrollbar { width: 0; }
+  .turn { margin-bottom: 20px; animation: fade 0.3s ease both; }
+  .turn .role {
+    font: 500 9px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); margin-bottom: 7px;
+  }
+  .turn.you .role { color: var(--accent); }
+  .turn.you .text { padding-left: 13px; border-left: 2px solid var(--accent); }
+  .turn .text { font: 400 15.5px/1.72 var(--serif); color: var(--ink-soft); white-space: pre-wrap; }
+  .turn .text strong { color: var(--ink); font-weight: 600; }
+  .turn .text code {
+    font: 400 12.5px/1 var(--mono); color: var(--accent);
+    background: rgba(168, 73, 42, 0.06); padding: 1px 4px; border-radius: 2px;
+  }
+  .footnote {
+    display: flex; align-items: baseline; gap: 7px; margin: -6px 0 18px;
+    font: 400 11.5px/1.5 var(--mono); color: var(--faint);
+  }
+  .footnote .lead { flex: none; color: var(--rule-strong); }
+  .footnote .name { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+  .footnote .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .footnote .meta { margin-left: auto; flex: none; font-size: 10px; }
+
+  .note {
+    margin: 2px 0 20px; padding: 15px 16px 14px;
+    border: 1px solid var(--ink); background:
+      repeating-linear-gradient(135deg, rgba(168, 73, 42, 0.035) 0 6px, transparent 6px 12px);
+    animation: fade 0.3s ease both;
+  }
+  .note .label { font: 500 9px/1 var(--sans); letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+  .note h3 { margin: 9px 0 5px; font: 400 18px/1.35 var(--serif); }
+  .note p { margin: 0 0 12px; font: 400 12.5px/1.55 var(--sans); color: var(--muted); }
+  .note .cmd {
+    font: 400 12px/1.5 var(--mono); color: var(--ink); background: rgba(28, 26, 23, 0.05);
+    border-left: 2px solid var(--ink); padding: 8px 10px; margin-bottom: 14px; overflow-x: auto; white-space: pre;
+  }
+  .note .acts { display: flex; align-items: center; gap: 16px; }
+  .note .allow {
+    font: 500 10.5px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase;
+    background: var(--ink); color: var(--paper); padding: 10px 16px;
+  }
+  .note .deny {
+    font: 500 10.5px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); text-decoration: underline; text-underline-offset: 4px;
+  }
+  .note .ok { font: 500 10px/1 var(--sans); letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); }
+
+  .composer {
+    display: flex; align-items: flex-end; gap: 12px; padding: 12px 22px calc(16px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--rule-strong); background: rgba(250, 247, 241, 0.9); backdrop-filter: blur(6px);
+  }
+  .composer input {
+    flex: 1; min-width: 0; font: italic 15px/1.4 var(--serif); color: var(--ink);
+    background: transparent; border: 0; outline: none; padding: 5px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .composer input::placeholder { color: var(--faint); }
+  .composer input:focus { border-bottom-color: var(--ink); }
+  .composer .send {
+    font: 500 10px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink);
+    padding-bottom: 8px; white-space: nowrap;
+  }
+
+  /* login */
+  .login { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 30px 70px; }
+  .login .mono { font: 500 9px/1 var(--sans); letter-spacing: 0.28em; text-transform: uppercase; color: var(--faint); }
+  .login .wordmark { margin: 14px 0 0; font: 400 44px/1 var(--serif); letter-spacing: 0.1em; }
+  .login .tagline { margin: 12px 0 30px; font: italic 15px/1.6 var(--serif); color: var(--muted); }
+  .login input {
+    width: 100%; font: 400 15px/1.4 var(--mono); letter-spacing: 0.14em; color: var(--ink);
+    background: transparent; border: 0; border-bottom: 1px solid var(--rule-strong);
+    outline: none; padding: 10px 0; margin-bottom: 22px;
+  }
+  .login input::placeholder { font: 500 10px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); }
+  .login input:focus { border-bottom-color: var(--ink); }
+  .login .go {
+    align-self: flex-start; font: 500 10.5px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase;
+    background: var(--ink); color: var(--paper); padding: 12px 22px;
+  }
+  .login .fine { margin-top: 34px; font: 400 11px/1.6 var(--sans); color: var(--faint); letter-spacing: 0.02em; }
+</style>
+</head>
+<body>
+<div class="stage"><div class="phone" id="app"></div></div>
+<script>
+const DATA = {
+  projects: [
+    {
+      name: 'PLM',
+      worktrees: [
+        {
+          branch: 'feature/folder-upload',
+          tasks: [
+            { id: 't1', title: '新建任务：导入 PK2C_全套.xlsx 更新零件属性', agent: 'claude', state: 'running', detail: '正在比对 Excel 与 EBOM 的零件清单', time: '刚刚' },
+            { id: 't2', title: '文件夹上传下载改造方案', agent: 'claude', state: 'attention', detail: '等待确认：是否排除副本零件？', time: '2 分钟前' },
+            { id: 't3', title: '表头文字被遮挡修复（流程审批页）', agent: 'claude', state: 'idle', detail: '已完成并推送成功', time: '4 小时前' }
+          ]
+        },
+        {
+          branch: 'master',
+          tasks: [
+            { id: 't4', title: '整车配置销售地区保存后消失问题', agent: 'claude', state: 'idle', detail: '瓶颈在 N+1 查询，已定位到接口', time: '1 天前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'FCP',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't5', title: '测速改为测 FCP 链路速度而非 TCP', agent: 'claude', state: 'running', detail: '正在修改 src/net/probe.rs', time: '刚刚' },
+            { id: 't6', title: '链路测试底部说明文字精简', agent: 'codex', state: 'idle', detail: 'v0.0.5 已发布', time: '28 分钟前' }
+          ]
+        }
+      ]
+    },
+    {
+      name: 'orca',
+      worktrees: [
+        {
+          branch: 'main',
+          tasks: [
+            { id: 't7', title: '安卓端配对后重连一直失败的原因分析', agent: 'claude', state: 'idle', detail: '已定位：128 连接上限被占满', time: '1 小时前' }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+const TRANSCRIPT = [
+  { kind: 'user', text: '把 Excel 导入改成只更新原始零件（copy_type=0），副本跳过。' },
+  { kind: 'assistant', text: '明白。现在的过滤条件在 <code>BomImportService#syncFromExcel</code> 里，加一个 copy_type 判断即可。' },
+  { kind: 'tool', name: 'read', target: 'backend/bom-service/…/BomImportService.java' },
+  { kind: 'tool', name: 'edit', target: 'BomImportService.java', meta: '+12 −3' },
+  { kind: 'assistant', text: '改好了，测试 12 项全过：' },
+  { kind: 'tool', name: 'bash', target: './mvnw -q -pl bom-service test', meta: '12 passed · 8.4s' },
+  { kind: 'approval', title: '要推送到 master 吗？', desc: '工作树干净，12 项测试通过。', command: 'git push origin master' },
+  { kind: 'assistant', text: '确认后我就推送，并同步更新 CHANGELOG。' }
+]
+
+const state = { screen: 'board', taskId: null, filter: 'all', approved: false, sent: [] }
+const app = document.getElementById('app')
+const allTasks = DATA.projects.flatMap((p) => p.worktrees.flatMap((w) => w.tasks))
+const current = () => allTasks.find((t) => t.id === state.taskId) || allTasks[0]
+const stateWord = { running: '进行中', attention: '待确认', idle: '空闲' }
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+
+function board() {
+  const counts = { all: allTasks.length, running: allTasks.filter((t) => t.state === 'running').length, attention: allTasks.filter((t) => t.state === 'attention').length }
+  const keep = (t) => state.filter === 'all' || t.state === state.filter
+  const groups = DATA.projects
+    .map((p) => ({ name: p.name, worktrees: p.worktrees.map((w) => ({ ...w, tasks: w.tasks.filter(keep) })) }))
+    .map((p) => ({ ...p, worktrees: p.worktrees.filter((w) => w.tasks.length) }))
+    .filter((p) => p.worktrees.length)
+
+  return `<div class="screen">
+    <header class="masthead">
+      <div class="kicker"><span class="dot"></span><span>orca · 家里那台机器</span><span class="right">${esc(today)}</span></div>
+      <div class="title-row">
+        <h1>进行中的<em>工作</em></h1>
+        <button class="signout" data-go="login">退出</button>
+      </div>
+      <p class="dek">${counts.running} 个任务正在跑，${counts.attention} 个等你回话。</p>
+    </header>
+    <div class="rule double"></div>
+    <nav class="filters">
+      ${['all', 'running', 'attention'].map((k) => `<button class="${state.filter === k ? 'on' : ''}" data-filter="${k}">${{ all: '全部', running: '进行中', attention: '待确认' }[k]}<b>${counts[k]}</b></button>`).join('')}
+    </nav>
+    <div class="scroll">
+      ${groups.map((p, i) => `
+        <section class="project">
+          <div class="project-head"><span class="no">${String(i + 1).padStart(2, '0')}</span><h2>${esc(p.name)}</h2><span class="count">${p.worktrees.reduce((n, w) => n + w.tasks.length, 0)} 条</span></div>
+          ${p.worktrees.map((w) => `
+            <div class="wt-line"><span>⑂</span><span class="br">${esc(w.branch)}</span><button class="new" data-new="1">新建</button></div>
+            ${w.tasks.map((t) => `
+              <button class="task ${t.state === 'running' ? 'run' : t.state === 'attention' ? 'wait' : ''}" data-task="${t.id}">
+                <span class="headline"><span class="mark">${t.state === 'attention' ? '!' : t.state === 'running' ? '●' : '·'}</span><span class="body">${esc(t.title)}</span></span>
+                <span class="line">${esc(t.detail)}</span>
+                <span class="foot">
+                  ${t.state === 'running' ? '<span class="spin"></span>' : ''}
+                  <span class="state">${stateWord[t.state]}</span><span class="sep">/</span><span>${esc(t.agent)}</span>
+                  <span class="time">${esc(t.time)}</span>
+                </span>
+              </button>`).join('')}
+          `).join('')}
+        </section>`).join('')}
+      ${groups.length ? '' : '<p class="empty">这一栏暂时是空的。</p>'}
+      <p class="colophon">— 远的不是距离，是还没回复的那条消息 —</p>
+    </div>
+  </div>`
+}
+
+function thread() {
+  const t = current()
+  const items = TRANSCRIPT.map((item, i) => {
+    if (item.kind === 'user') return `<div class="turn you"><div class="role">你</div><div class="text">${esc(item.text)}</div></div>`
+    if (item.kind === 'assistant') {
+      const lead = i === TRANSCRIPT.findIndex((x) => x.kind === 'assistant') ? `<div class="role">${esc(t.agent)}</div>` : ''
+      return `<div class="turn">${lead}<div class="text">${item.text}</div></div>`
+    }
+    if (item.kind === 'tool') return `<div class="footnote"><span class="lead">↳</span><span class="name">${esc(item.name)}</span><span class="what">${esc(item.target)}</span>${item.meta ? `<span class="meta">${esc(item.meta)}</span>` : ''}</div>`
+    if (item.kind === 'approval') {
+      if (t.state !== 'attention') return ''
+      return `<div class="note">
+        <div class="label">需要你的确认</div>
+        <h3>${esc(item.title)}</h3><p>${esc(item.desc)}</p>
+        <div class="cmd">${esc(item.command)}</div>
+        ${state.approved
+          ? '<div class="ok">已允许 · 正在继续</div>'
+          : '<div class="acts"><button class="allow" data-approve="1">允许</button><button class="deny" data-deny="1">拒绝</button></div>'}
+      </div>`
+    }
+    return ''
+  }).join('')
+  const extra = state.sent.map((text) => `<div class="turn you"><div class="role">你</div><div class="text">${esc(text)}</div></div>`).join('')
+  return items + extra
+}
+
+function task() {
+  const t = current()
+  const running = t.state === 'running'
+  return `<div class="screen">
+    <div class="topnav">
+      <button class="back" data-go="board">← 返回</button>
+      <span class="where">${esc(current().agent)} / ${esc(t.id)}</span>
+      ${running ? '<button class="stop" data-stop="1">停止</button>' : ''}
+    </div>
+    <div class="rule"></div>
+    <div class="article-head">
+      <div class="eyebrow">${esc(t.agent)} 的工作记录</div>
+      <h2>${esc(t.title)}</h2>
+      <div class="byline">
+        <span class="pill ${t.state === 'running' ? 'on' : t.state === 'attention' ? 'wait' : ''}">${stateWord[t.state]}</span>
+        <span class="sep">·</span><span>${esc(t.time)}</span>
+      </div>
+    </div>
+    <div class="rule" style="margin-top:14px"></div>
+    <div class="thread" id="thread">${thread()}</div>
+    <div class="composer">
+      <input id="input" placeholder="写一条回复…" />
+      <button class="send" data-send="1">发送 →</button>
+    </div>
+  </div>`
+}
+
+function login() {
+  return `<div class="screen">
+    <div class="login">
+      <div class="mono">orca-web · private edition</div>
+      <div class="wordmark">Orca</div>
+      <p class="tagline">你的工作，在看得到的地方继续。</p>
+      <input id="pw" type="password" placeholder="password" autocomplete="current-password" />
+      <button class="go" data-go="board">进入</button>
+      <p class="fine">只有一台机器、一个人。密码错误时请稍候再试。</p>
+    </div>
+  </div>`
+}
+
+function render() {
+  app.innerHTML = state.screen === 'board' ? board() : state.screen === 'task' ? task() : login()
+  if (state.screen === 'task') {
+    const box = document.getElementById('thread')
+    if (box) box.scrollTop = box.scrollHeight
+    const input = document.getElementById('input')
+    if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send() })
+  }
+}
+
+function send() {
+  const input = document.getElementById('input')
+  if (!input || !input.value.trim()) return
+  state.sent.push(input.value.trim())
+  input.value = ''
+  render()
+}
+
+app.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-task],[data-go],[data-filter],[data-approve],[data-deny],[data-send],[data-stop],[data-new]')
+  if (!el) return
+  if (el.dataset.task) { state.taskId = el.dataset.task; state.screen = 'task'; state.approved = false; state.sent = []; render(); return }
+  if (el.dataset.go === 'board') { state.screen = 'board'; render(); return }
+  if (el.dataset.go === 'login') { state.screen = 'login'; render(); return }
+  if (el.dataset.filter) { state.filter = el.dataset.filter; render(); return }
+  if (el.dataset.approve) { state.approved = true; render(); return }
+  if (el.dataset.deny) { state.screen = 'board'; render(); return }
+  if (el.dataset.send) { send(); return }
+  if (el.dataset.stop) { current().state = 'idle'; render(); return }
+  if (el.dataset.new) { state.taskId = 't2'; state.screen = 'task'; render(); return }
+})
+
+render()
+</script>
+</body>
+</html>

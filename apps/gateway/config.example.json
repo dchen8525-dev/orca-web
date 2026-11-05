@@ -1,0 +1,10 @@
+{
+  "serverUrl": "wss://orca.example.com/gateway",
+  "gatewayKey": "replace-with-a-random-32-byte-secret",
+  "gatewayId": "home-desktop",
+  "orca": {
+    "endpoint": "ws://127.0.0.1:6768",
+    "deviceToken": "pairing-offer-device-token",
+    "hostPublicKeyB64": "pairing-offer-public-key"
+  }
+}
