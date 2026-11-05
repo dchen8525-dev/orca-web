@@ -116,6 +116,25 @@ export type HistoryPage = {
 
 export type HistoryResult = { ok: boolean; page: HistoryPage }
 
+export type AgentSessionModelOption = {
+  id: string
+  label?: string
+  description?: string
+  isDefault?: boolean
+}
+
+export type AgentSessionOptions = {
+  models?: AgentSessionModelOption[]
+  modelsKnown?: boolean
+  current?: {
+    model?: string
+    permissionMode?: string
+    reportedPermissionMode?: string | null | undefined
+    effort?: string
+    confirmed?: readonly string[]
+  }
+}
+
 export function sessionIdFromPaneKey(paneKey: string): string | null {
   const match = /^structured-agent-session-(.+):[^:]+$/.exec(paneKey)
   return match ? match[1]! : null

@@ -590,6 +590,20 @@ textarea {
   color: var(--muted);
 }
 
+/* header pills double as buttons to open the session settings sheet */
+button.pill {
+  cursor: pointer;
+}
+
+button.pill:hover {
+  color: var(--ink);
+}
+
+button.pill::after {
+  content: ' ▾';
+  color: var(--faint);
+}
+
 .pill-green {
   color: var(--green);
   border-color: rgba(63, 107, 82, 0.4);

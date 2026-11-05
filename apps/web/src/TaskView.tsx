@@ -5,6 +5,7 @@ import { relativeTime, stateLabel, toneForState } from './Board'
 import { Markdown } from './Markdown'
 import type {
   ApprovalBody,
+  AgentSessionOptions,
   HistoryItem,
   HistoryPage,
   HistoryResult,
@@ -15,6 +16,10 @@ import type {
 
 type MutationResult =
   | { ok: true; fence?: number }
+  | { ok: false; refusal: { code: string; message?: string } }
+
+type OptionWriteResult =
+  | { ok: true; fence?: number; value?: { options?: AgentSessionOptions } }
   | { ok: false; refusal: { code: string; message?: string } }
 
 type PromptKind = 'approval' | 'question'
@@ -44,6 +49,10 @@ export function TaskView({
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [options, setOptions] = useState<AgentSessionOptions | null>(null)
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const [optionBusyKey, setOptionBusyKey] = useState<string | null>(null)
+  const [optionError, setOptionError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Older pages must survive live refetches, so the tail grows as they are loaded.
@@ -62,6 +71,15 @@ export function TaskView({
       setError(null)
     } catch (failure) {
       setError((failure as Error).message)
+    }
+  }, [hub, sessionId])
+
+  // Options are per-open data, not live journal; an unsupported host keeps them hidden.
+  const loadOptions = useCallback(async () => {
+    try {
+      setOptions(await hub.request<AgentSessionOptions>('agentSession.options', { sessionId }))
+    } catch {
+      setOptions(null)
     }
   }, [hub, sessionId])
 
@@ -102,8 +120,9 @@ export function TaskView({
   useEffect(() => {
     if (status.gatewayConnected) {
       void load()
+      void loadOptions()
     }
-  }, [status.gatewayConnected, load])
+  }, [status.gatewayConnected, load, loadOptions])
 
   useEffect(() => {
     if (!status.gatewayConnected) {
@@ -225,6 +244,39 @@ export function TaskView({
   const state = running ? 'working' : 'idle'
   const tone = toneForState(state)
 
+  const setOption = async (key: string, value: string) => {
+    if (!page?.fence) {
+      return
+    }
+    setOptionBusyKey(key)
+    setOptionError(null)
+    try {
+      const fields = { key, value }
+      const envelope = await mutationEnvelope({
+        method: 'agentSession.setOption',
+        sessionId,
+        fence: page.fence,
+        fields
+      })
+      const result = await hub.request<OptionWriteResult>('agentSession.setOption', {
+        envelope,
+        ...fields
+      })
+      if (!result.ok) {
+        setOptionError(
+          `${result.refusal.code}${result.refusal.message ? `: ${result.refusal.message}` : ''}`
+        )
+        return
+      }
+      // The fence advanced and the provider may have reshuffled the catalog; refresh both.
+      await Promise.all([load(), loadOptions()])
+    } catch (failure) {
+      setOptionError((failure as Error).message)
+    } finally {
+      setOptionBusyKey(null)
+    }
+  }
+
   // Role labels only where the speaker changes, and a long run of tool calls folds into
   // one line so the conversation stays readable on a phone.
   const entries = useMemo<Entry[]>(() => {
@@ -276,6 +328,17 @@ export function TaskView({
           <span className={`pill${tone === 'green' ? ' pill-green' : tone === 'amber' ? ' pill-amber' : ''}`}>
             {stateLabel(state)}
           </span>
+          {options ? (
+            <>
+              <span className="sep">·</span>
+              <button className="pill" onClick={() => setOptionsOpen(true)}>
+                {`模型 ${currentModelLabel(options)}`}
+              </button>
+              <button className="pill" onClick={() => setOptionsOpen(true)}>
+                {`权限 ${permissionModeLabel(options)}`}
+              </button>
+            </>
+            ) : null}
           {lastUpdated(page) ? (
             <>
               <span className="sep">·</span>
@@ -353,6 +416,114 @@ export function TaskView({
         <button onClick={() => void send()} disabled={busy || !text.trim()}>
           发送 →
         </button>
+      </div>
+      {optionsOpen && options ? (
+        <SessionOptionsSheet
+          options={options}
+          busyKey={optionBusyKey}
+          error={optionError}
+          onSet={(key, value) => void setOption(key, value)}
+          onClose={() => setOptionsOpen(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+const PERMISSION_MODES: readonly { value: string; label: string; description: string }[] = [
+  { value: 'ask', label: '每次都问', description: '编辑和命令都先找你要确认' },
+  { value: 'accept-edits', label: '自动接受编辑', description: '文件编辑自动批，其余还要问' },
+  { value: 'auto', label: '替我审批', description: '审批请求由系统替你回应' },
+  { value: 'full-access', label: '全部放行', description: '所有编辑和命令都不再询问' },
+  { value: 'own', label: 'agent 自己的设置', description: '沿用 agent 配置里的权限' }
+] as const
+
+function currentModelLabel(options: AgentSessionOptions): string {
+  const id = options.current?.model
+  const known = options.models?.find((model) => model.id === id)
+  if (known?.label) {
+    return shortLabel(known.label)
+  }
+  return id ? shortLabel(id) : '未报'
+}
+
+function permissionModeLabel(options: AgentSessionOptions): string {
+  const value = options.current?.permissionMode ?? options.current?.reportedPermissionMode
+  if (!value) {
+    return '未报'
+  }
+  return PERMISSION_MODES.find((mode) => mode.value === value)?.label ?? value
+}
+
+function shortLabel(value: string): string {
+  if (value.length > 24) {
+    return `${value.slice(0, 23)}…`
+  }
+  return value
+}
+
+function SessionOptionsSheet({
+  options,
+  busyKey,
+  error,
+  onSet,
+  onClose
+}: {
+  options: AgentSessionOptions
+  busyKey: string | null
+  error: string | null
+  onSet: (key: string, value: string) => void
+  onClose: () => void
+}) {
+  const current = options.current ?? {}
+  const modelActive = (id: string): boolean => id === current.model
+  return (
+    <div className="sheet">
+      <div className="topnav">
+        <button className="back" onClick={onClose}>
+          关闭
+        </button>
+        <span className="sheet-title">会话设置</span>
+        <span className="where">{shortLabel(current.model ?? '')}</span>
+      </div>
+      <div className="rule" />
+      <div className="sheet-body">
+        {busyKey ? <p className="muted small">正在应用 {busyKey}…</p> : null}
+        {error ? <p className="error">{error}</p> : null}
+
+        <p className="field-label">模型（下一回合生效）</p>
+        {options.models?.length ? (
+          <div className="chips">
+            {options.models.map((model) => (
+              <button
+                key={model.id}
+                className={`chip${modelActive(model.id) ? ' chip-active' : ''}`}
+                disabled={busyKey !== null}
+                title={model.description}
+                onClick={() => onSet('model', model.id)}
+              >
+                {model.label ?? model.id}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="muted small">没有获取到可选模型</p>
+        )}
+
+        <p className="field-label">权限（决定 agent 什么时候来找你确认）</p>
+        <div className="chips">
+          {PERMISSION_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              className={`chip${current.permissionMode === mode.value ? ' chip-active' : ''}`}
+              disabled={busyKey !== null}
+              title={mode.description}
+              onClick={() => onSet('permissionMode', mode.value)}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
