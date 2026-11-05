@@ -131,6 +131,8 @@ export class HubLink {
       case 'ping':
         this.send({ type: 'pong' })
         return
+      case 'pong':
+        return
       case 'request':
         void this.handleRequest(frame.id, frame.method, frame.params, frame.timeoutMs)
         return

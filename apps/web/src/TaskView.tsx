@@ -57,6 +57,14 @@ export function TaskView({
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Older pages must survive live refetches, so the tail grows as they are loaded.
   const olderCount = useRef(0)
+  // A response that lands after unmount or a session switch must not touch state.
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [sessionId])
 
   const load = useCallback(async () => {
     try {
@@ -65,21 +73,31 @@ export function TaskView({
         direction: 'tail',
         limit: Math.min(200, 40 + olderCount.current)
       })
+      if (!alive.current) {
+        return
+      }
       if (history.page) {
         setPage(history.page)
       }
       setError(null)
     } catch (failure) {
-      setError((failure as Error).message)
+      if (alive.current) {
+        setError((failure as Error).message)
+      }
     }
   }, [hub, sessionId])
 
   // Options are per-open data, not live journal; an unsupported host keeps them hidden.
   const loadOptions = useCallback(async () => {
     try {
-      setOptions(await hub.request<AgentSessionOptions>('agentSession.options', { sessionId }))
+      const next = await hub.request<AgentSessionOptions>('agentSession.options', { sessionId })
+      if (alive.current) {
+        setOptions(next)
+      }
     } catch {
-      setOptions(null)
+      if (alive.current) {
+        setOptions(null)
+      }
     }
   }, [hub, sessionId])
 
@@ -133,6 +151,16 @@ export function TaskView({
         setError(event.message)
         return
       }
+      // A reset needs an immediate refetch, not the burst debounce: the stream is new and
+      // nothing else will arrive to trigger it.
+      if (event.kind === 'reset') {
+        if (loadTimer.current) {
+          clearTimeout(loadTimer.current)
+          loadTimer.current = null
+        }
+        void load()
+        return
+      }
       if (loadTimer.current) {
         clearTimeout(loadTimer.current)
       }
@@ -140,6 +168,16 @@ export function TaskView({
       loadTimer.current = setTimeout(() => void load(), 350)
     })
   }, [hub, sessionId, status.gatewayConnected, load])
+
+  useEffect(
+    () => () => {
+      if (loadTimer.current) {
+        clearTimeout(loadTimer.current)
+        loadTimer.current = null
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     const element = scrollRef.current

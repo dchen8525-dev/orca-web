@@ -69,7 +69,7 @@ export class Hub {
         this.admitGateway(socket, frame)
         return
       }
-      this.handleGatewayFrame(frame)
+      this.handleGatewayFrame(socket, frame)
     })
 
     socket.on('close', () => {
@@ -136,6 +136,10 @@ export class Hub {
     this.descriptor = hello.orca
     this.log(`gateway ${hello.gatewayId} connected (orca=${hello.orcaState})`)
     safeSend(socket, { type: 'welcome', gatewayId: hello.gatewayId } satisfies HubFrame)
+
+    // Requests parked on the previous socket will never answer; fail them now instead of
+    // letting every browser wait out its own 30s timeout.
+    this.failPending({ code: 'remote_runtime_unavailable', message: 'Home gateway reconnected' })
     this.broadcastState(true)
 
     // The hub owns subscription ids; replay them so a reconnect resumes every stream.
@@ -160,20 +164,20 @@ export class Hub {
     this.gatewayId = null
     this.orcaState = null
     this.log('gateway disconnected')
-    for (const [gatewayId, entry] of this.pending) {
-      this.pending.delete(gatewayId)
-      entry.client.pending.delete(entry.localId)
-      this.send(entry.client, {
-        type: 'request-result',
-        id: entry.localId,
-        ok: false,
-        error: { code: 'remote_runtime_unavailable', message: 'Home gateway is not connected' }
-      })
-    }
+    this.failPending({ code: 'remote_runtime_unavailable', message: 'Home gateway is not connected' })
     this.broadcastState(false)
   }
 
-  private handleGatewayFrame(frame: GatewayFrame): void {
+  /** Answers every in-flight browser request with an error and forgets it. */
+  private failPending(error: LinkError): void {
+    for (const [gatewayId, entry] of this.pending) {
+      this.pending.delete(gatewayId)
+      entry.client.pending.delete(entry.localId)
+      this.send(entry.client, { type: 'request-result', id: entry.localId, ok: false, error })
+    }
+  }
+
+  private handleGatewayFrame(socket: WebSocket, frame: GatewayFrame): void {
     switch (frame.type) {
       case 'request-result': {
         const entry = this.pending.get(frame.id)
@@ -209,6 +213,10 @@ export class Hub {
       case 'orca-state':
         this.orcaState = frame.state
         this.broadcastState(true, frame.message)
+        return
+      case 'ping':
+        // The gateway probes for liveness; silence here reads as a dead hub after 75s.
+        safeSend(socket, { type: 'pong' })
         return
       case 'pong':
         return

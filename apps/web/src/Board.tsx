@@ -112,15 +112,16 @@ export function Board({
       return
     }
     return hub.subscribe('agentSession.subscribeStatus', {}, (event) => {
-      if (event.kind === 'reset') {
-        setProjections(new Map())
+      if (event.kind === 'reset' || event.kind === 'error') {
+        // A reset means "refetch", not "nothing is running": keep the last known
+        // statuses on screen until the fresh snapshot replaces them.
         void load(true)
         return
       }
-      if (event.kind === 'error') {
+      const frame = event.result as StatusEvent
+      if (frame.type === 'end') {
         return
       }
-      const frame = event.result as StatusEvent
       if (frame.type === 'snapshot') {
         // An empty opening snapshot means "not seeded yet", not "no tasks".
         if (frame.sessions.length === 0) {

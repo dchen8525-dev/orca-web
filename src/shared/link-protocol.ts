@@ -32,6 +32,8 @@ export type GatewayFrame =
   /** The stream ended or was re-subscribed; consumers must refetch rather than assume continuity. */
   | { type: 'stream-reset'; id: string }
   | { type: 'orca-state'; state: OrcaState; message?: string }
+  /** Either side may probe; the peer must answer `pong` or be treated as dead. */
+  | { type: 'ping' }
   | { type: 'pong' }
 
 export type HubFrame =

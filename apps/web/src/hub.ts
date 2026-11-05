@@ -47,13 +47,20 @@ export class HubClient {
   private lastFrameAt = 0
 
   connect(): void {
+    if (!this.closed && this.socket) {
+      // Already connecting or connected; a second open() would race the first one.
+      return
+    }
     this.closed = false
+    this.attempt = 0
     void this.open()
   }
 
   close(): void {
     this.closed = true
     this.stopPing()
+    // Callers awaiting a request must not hang until their own timeout.
+    this.rejectPending(new Error('Connection closed'))
     this.socket?.close(1000, 'closing')
     this.socket = null
   }
@@ -102,12 +109,23 @@ export class HubClient {
       return
     }
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-    const socket = new WebSocket(`${scheme}://${location.host}/client`)
+    let socket: WebSocket
+    try {
+      socket = new WebSocket(`${scheme}://${location.host}/client`)
+    } catch {
+      // A constructor throw (illegal URL on some mobile WebViews) must still retry.
+      this.setStatus({ ...this.status, connected: false, gatewayConnected: false })
+      setTimeout(() => void this.open(), backoffMs(this.attempt++))
+      return
+    }
     this.socket = socket
     // A socket that never said hello was rejected at the upgrade; retrying cannot fix that.
     let admitted = false
 
     socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) {
+        return
+      }
       this.lastFrameAt = Date.now()
       if (typeof event.data !== 'string') {
         return
@@ -125,9 +143,11 @@ export class HubClient {
     })
 
     socket.addEventListener('close', () => {
-      if (this.socket === socket) {
-        this.socket = null
+      if (this.socket !== socket) {
+        // Superseded by a newer socket; its handlers own the state from here.
+        return
       }
+      this.socket = null
       this.stopPing()
       this.setStatus({ ...this.status, connected: false, gatewayConnected: false })
       this.rejectPending(new Error('Connection closed'))
@@ -142,6 +162,9 @@ export class HubClient {
     })
 
     socket.addEventListener('open', () => {
+      if (this.socket !== socket || this.closed) {
+        return
+      }
       this.attempt = 0
       this.lastFrameAt = Date.now()
       this.setStatus({ ...this.status, connected: true })
@@ -165,7 +188,9 @@ export class HubClient {
     } catch {
       // Server unreachable is not proof of a bad cookie.
     }
-    if (this.closed) {
+    // close() followed by connect() revives the instance; only the closed state set for
+    // this call may stop the retry chain.
+    if (this.socket) {
       return
     }
     if (!authenticated) {
