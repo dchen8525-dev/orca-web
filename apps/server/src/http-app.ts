@@ -1,6 +1,6 @@
 // HTTP surface: login/logout/session/health plus the built web app.
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { extname, join, normalize, resolve } from 'node:path'
+import { extname, join, normalize, resolve, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ServerConfig } from './config.ts'
 import { verifyPassword } from './passwords.ts'
@@ -44,7 +44,15 @@ export function createRequestHandler(options: RequestHandlerOptions): (
   const startedAt = Date.now()
 
   return (request, response) => {
-    const url = new URL(request.url ?? '/', 'http://localhost')
+    let url: URL
+    try {
+      url = new URL(request.url ?? '/', 'http://localhost')
+    } catch {
+      // `OPTIONS *` and other non-URI request targets throw here; answer and move on.
+      response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+      response.end('bad request\n')
+      return
+    }
     setSecurityHeaders(response)
 
     if (url.pathname === '/api/health') {
@@ -116,10 +124,22 @@ function serveStatic(staticDir: string | undefined, pathname: string, response: 
     return
   }
   const root = resolve(staticDir)
-  const relative = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, '')
+  // A malformed % escape throws; failing to reject one anonymous request must never
+  // take the process down.
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(pathname)
+  } catch {
+    response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+    response.end('bad request\n')
+    return
+  }
+  const relative = normalize(decoded).replace(/^(\.\.[/\\])+/, '')
   const requested = resolve(join(root, relative))
+  // startsWith alone would admit a sibling root like /app2 when this root is /app.
+  const inside = requested === root || requested.startsWith(root + sep)
   const target =
-    requested.startsWith(root) && existsSync(requested) && statSync(requested).isFile()
+    inside && existsSync(requested) && statSync(requested).isFile()
       ? requested
       : join(root, 'index.html')
 
@@ -129,8 +149,16 @@ function serveStatic(staticDir: string | undefined, pathname: string, response: 
     return
   }
   const type = CONTENT_TYPES[extname(target).toLowerCase()] ?? 'application/octet-stream'
-  response.writeHead(200, { 'content-type': type })
-  createReadStream(target).pipe(response)
+  // index.html references content-hashed assets that each deploy replaces: a cached
+  // index would point at deleted files and break the app until a hard refresh.
+  response.writeHead(200, {
+    'content-type': type,
+    'cache-control':
+      extname(target).toLowerCase() === '.html' ? 'no-store' : 'public, max-age=31536000, immutable'
+  })
+  createReadStream(target)
+    .on('error', () => response.destroy())
+    .pipe(response)
 }
 
 function readJsonBody(
@@ -165,18 +193,30 @@ function recordFailure(
   const entry = failures.get(ip)
   if (!entry || entry.resetAt <= now) {
     failures.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
-    return
+  } else {
+    entry.count++
   }
-  entry.count++
+  // A spraying attacker rotating spoofed XFF values grows the map without bound;
+  // expired rows are never read again, so drop them once the table is large.
+  if (failures.size > 512) {
+    for (const [key, record] of failures) {
+      if (record.resetAt <= now) {
+        failures.delete(key)
+      }
+    }
+  }
 }
 
 function clientIp(request: IncomingMessage, trustProxy: boolean): string {
   if (trustProxy) {
     const forwarded = request.headers['x-forwarded-for']
     const value = Array.isArray(forwarded) ? forwarded[0] : forwarded
-    const first = value?.split(',')[0]?.trim()
-    if (first) {
-      return first
+    // The closest trusted proxy appends the real client last; earlier entries are
+    // attacker-controlled and would let a spoofer rotate past the failure limit.
+    const hops = value?.split(',').map((hop) => hop.trim()).filter(Boolean)
+    const last = hops?.[hops.length - 1]
+    if (last) {
+      return last
     }
   }
   return request.socket.remoteAddress ?? 'unknown'

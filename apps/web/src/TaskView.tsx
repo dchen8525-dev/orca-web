@@ -66,27 +66,6 @@ export function TaskView({
     }
   }, [sessionId])
 
-  const load = useCallback(async () => {
-    try {
-      const history = await hub.request<HistoryResult>('agentSession.history', {
-        sessionId,
-        direction: 'tail',
-        limit: Math.min(200, 40 + olderCount.current)
-      })
-      if (!alive.current) {
-        return
-      }
-      if (history.page) {
-        setPage(history.page)
-      }
-      setError(null)
-    } catch (failure) {
-      if (alive.current) {
-        setError((failure as Error).message)
-      }
-    }
-  }, [hub, sessionId])
-
   // Options are per-open data, not live journal; an unsupported host keeps them hidden.
   const loadOptions = useCallback(async () => {
     try {
@@ -100,6 +79,32 @@ export function TaskView({
       }
     }
   }, [hub, sessionId])
+
+  const load = useCallback(async () => {
+    try {
+      const history = await hub.request<HistoryResult>('agentSession.history', {
+        sessionId,
+        direction: 'tail',
+        limit: Math.min(200, 40 + olderCount.current)
+      })
+      if (!alive.current) {
+        return
+      }
+      if (history.page) {
+        setPage(history.page)
+      } else if (history.reset) {
+        // The journal was rebuilt under this session; the cached page is from a dead epoch.
+        olderCount.current = 0
+        setPage(null)
+        void loadOptions()
+      }
+      setError(null)
+    } catch (failure) {
+      if (alive.current) {
+        setError((failure as Error).message)
+      }
+    }
+  }, [hub, sessionId, loadOptions])
 
   const loadOlder = async () => {
     const cursor = page?.window?.oldest
@@ -471,6 +476,7 @@ export function TaskView({
 
       <div className="composer">
         <textarea
+          name="reply"
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder={running ? '回复（会排队）…' : '写一条回复…'}

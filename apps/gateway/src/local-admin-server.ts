@@ -44,6 +44,12 @@ export class LocalAdminServer {
     this.server.listen(this.options.port, '127.0.0.1', () => {
       console.log(`${new Date().toISOString()} admin page at http://127.0.0.1:${this.options.port}`)
     })
+    // A silent EADDRINUSE crash-loop is undiagnosable; say why, then let the
+    // account's restart loop bring the gateway back cleanly.
+    this.server.on('error', (error) => {
+      console.error(`${new Date().toISOString()} admin server error: ${(error as Error).message}`)
+      setTimeout(() => process.exit(3), 500).unref()
+    })
   }
 
   stop(): void {
@@ -242,7 +248,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     setText('hub-value', hub ? '已连接' : '重试中…');
     var orca = status.orcaState;
     var orcaDot = document.getElementById('orca-dot');
-    orcaDot.className = 'dot ' + (orca === 'connected' ? 'on' : 'warn');
+    orcaDot.className = 'dot ' + (orca === 'connected' ? 'on' : orca === 'disconnected' ? 'off' : 'warn');
     var desc = status.orcaDescriptor || {};
     var orcaText = orca;
     if (desc.appVersion) orcaText += ' · Orca ' + desc.appVersion;

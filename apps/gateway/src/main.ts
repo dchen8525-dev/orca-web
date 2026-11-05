@@ -18,6 +18,8 @@ log(`orca-web gateway starting`)
 log(describeConfig(config))
 
 let runtime = createRuntime(config)
+runtime.bridge.start()
+runtime.hub.start()
 
 const admin = new LocalAdminServer({
   port: config.adminPort,

@@ -114,7 +114,7 @@ export type HistoryPage = {
   latestTurn?: { itemId: string; observedAt: number; turn: { turnId: string; state: string } } | null
 }
 
-export type HistoryResult = { ok: boolean; page: HistoryPage }
+export type HistoryResult = { ok: boolean; page: HistoryPage; reset?: string }
 
 export type AgentSessionModelOption = {
   id: string

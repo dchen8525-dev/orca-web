@@ -148,8 +148,11 @@ export function decodePairingCode(input: string): PairingOffer {
   if (!trimmed) {
     throw new ConfigError('配对码为空')
   }
-  const cut = trimmed.indexOf('code=')
-  const candidate = cut !== -1 ? trimmed.slice(cut + 'code='.length) : trimmed
+  // The parameter separator is "?code=" or "&code="; matching plain "code=" would let the
+  // same 5 chars appear inside a bare base64 payload and cut it mid-way.
+  const separator = /[?&]code=/.exec(trimmed)
+  const prefix = !separator && trimmed.startsWith('code=') ? 5 : 0
+  const candidate = separator ? trimmed.slice(separator.index + separator[0].length) : trimmed.slice(prefix)
   const code = /^[A-Za-z0-9_-]+/.exec(candidate)?.[0]
   if (!code) {
     throw new ConfigError('配对码里没有可解码的 base64 内容')

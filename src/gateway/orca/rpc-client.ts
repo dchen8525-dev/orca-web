@@ -67,9 +67,16 @@ export class OrcaConnection {
     const connection = new OrcaConnection(socket, options)
     await connection.performHandshake(options)
     // Per-socket, not per-token: the next connection must advertise again.
-    await connection.request('runtime.clientCapabilities.update', {
-      clientCapabilities: [...ORCA_WEB_CLIENT_CAPABILITIES]
-    })
+    try {
+      await connection.request('runtime.clientCapabilities.update', {
+        clientCapabilities: [...ORCA_WEB_CLIENT_CAPABILITIES]
+      })
+    } catch (error) {
+      // The handshake succeeded, so the socket is open; no caller can reach it to close.
+      // Leaving it idle leaks one of Orca's 128 connection slots on every retry.
+      connection.close()
+      throw error
+    }
     return connection
   }
 
@@ -267,7 +274,10 @@ export class OrcaConnection {
       }
       const plaintext = this.e2ee.openText(event.data)
       if (plaintext === null) {
+        // Counter desync: the connection is unusable, and failAll() already marked it
+        // closed, so close() would early-return. Tear the socket down so reconnect runs.
         this.failAll(new OrcaConnectionError('socket', 'Orca sent an undecryptable frame'))
+        this.socket.close()
         return
       }
       let frame: unknown
@@ -275,6 +285,7 @@ export class OrcaConnection {
         frame = JSON.parse(plaintext)
       } catch {
         this.failAll(new OrcaConnectionError('socket', 'Orca sent a non-JSON frame'))
+        this.socket.close()
         return
       }
       if (isKeepalive(frame)) {
