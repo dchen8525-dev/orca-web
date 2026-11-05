@@ -491,10 +491,28 @@ textarea {
   transition: background-color 0.4s ease;
 }
 
-/* the running state is alive: the mark itself breathes, no spreading ring */
+/* the running state flickers like a lit spark: flare, settle, flare again */
 .task-working .task-mark {
+  display: inline-block;
   color: var(--green);
-  animation: breathe 2.4s ease-in-out infinite;
+  animation: spark 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  transform-origin: 50% 58%;
+}
+
+@keyframes spark {
+  0%,
+  100% {
+    transform: scale(0.68) rotate(0deg);
+    opacity: 0.45;
+  }
+  30% {
+    transform: scale(1.14) rotate(16deg);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(0.88) rotate(7deg);
+    opacity: 0.75;
+  }
 }
 
 .task-attention .task-mark {
@@ -507,16 +525,66 @@ textarea {
 
 /* state bands: green is running, terracotta is waiting on you, grey is nothing happening.
    All three stay far below text contrast so the ink still does the talking. */
+
 .task-idle {
-  background: rgba(133, 124, 110, 0.06);
+  background-color: rgba(133, 124, 110, 0.06);
+  background-image: linear-gradient(
+    100deg,
+    rgba(133, 124, 110, 0) 32%,
+    rgba(133, 124, 110, 0.05) 50%,
+    rgba(133, 124, 110, 0) 68%
+  );
+  background-size: 240% 100%;
+  animation: sheen 9s linear infinite;
 }
 
 .task-working {
-  background: rgba(63, 107, 82, 0.1);
+  background-color: rgba(63, 107, 82, 0.09);
+  background-image: linear-gradient(
+    100deg,
+    rgba(63, 107, 82, 0.04) 24%,
+    rgba(63, 107, 82, 0.16) 50%,
+    rgba(63, 107, 82, 0.04) 76%
+  );
+  background-size: 220% 100%;
+  animation: wash 6s ease-in-out infinite;
 }
 
 .task-attention {
-  background: rgba(168, 73, 42, 0.08);
+  background-color: rgba(168, 73, 42, 0.05);
+  animation: appeal 3.6s ease-in-out infinite;
+}
+
+@keyframes sheen {
+  0% {
+    background-position: 110% 0;
+  }
+  100% {
+    background-position: -110% 0;
+  }
+}
+
+@keyframes wash {
+  0%,
+  100% {
+    background-position: 100% 0;
+  }
+  50% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes appeal {
+  0%,
+  100% {
+    background-color: rgba(168, 73, 42, 0.05);
+  }
+  18% {
+    background-color: rgba(168, 73, 42, 0.13);
+  }
+  46% {
+    background-color: rgba(168, 73, 42, 0.07);
+  }
 }
 
 .task-head {
@@ -782,28 +850,7 @@ button.pill::after {
   border-left: 2px solid var(--accent);
 }
 
-/* while the turn runs, the tail of the record answers live */
-
-.caret {
-  display: inline-block;
-  width: 8px;
-  height: 14px;
-  margin-left: 4px;
-  vertical-align: -2px;
-  background: var(--green);
-  animation: caret-blink 1.05s steps(1) infinite;
-}
-
-@keyframes caret-blink {
-  0%,
-  55% {
-    opacity: 1;
-  }
-  56%,
-  100% {
-    opacity: 0;
-  }
-}
+/* while the turn runs, the only signal is the activity line at the tail */
 
 .thinking {
   display: flex;
