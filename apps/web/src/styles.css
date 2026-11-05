@@ -407,6 +407,20 @@ textarea {
   opacity: 0.6;
 }
 
+/* state bands: green is running, terracotta is waiting on you, grey is nothing happening.
+   All three stay far below text contrast so the ink still does the talking. */
+.task-idle {
+  background: rgba(133, 124, 110, 0.06);
+}
+
+.task-working {
+  background: rgba(63, 107, 82, 0.1);
+}
+
+.task-attention {
+  background: rgba(168, 73, 42, 0.08);
+}
+
 .task-head {
   display: flex;
   gap: 10px;
