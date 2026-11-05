@@ -245,27 +245,22 @@ export function TaskView({
   const tone = toneForState(state)
 
   // What the agent is doing right now, read off the tail: the newest running tool
-  // names the activity, a streamed answer gets the caret, otherwise it is thinking.
-  const stream = useMemo(() => {
+  // names the activity, a streamed answer means it is writing, otherwise thinking.
+  const activity = useMemo(() => {
     if (!running) {
-      return { activity: '', caretItem: null as string | null }
+      return ''
     }
     const items = page?.items ?? []
-    let caretItem: string | null = null
-    let activity = '正在思考'
     for (let index = items.length - 1; index >= 0; index--) {
       const item = items[index]!
       if (item.body.kind === 'tool-call' && item.body.state === 'running') {
-        activity = `正在 ${item.body.name ?? '动手'}`
-        break
+        return `正在 ${item.body.name ?? '动手'}`
       }
       if (messageRole(item) === 'assistant') {
-        caretItem = item.itemId
-        activity = '正在回复'
-        break
+        return '正在回复'
       }
     }
-    return { activity, caretItem }
+    return '正在思考'
   }, [page?.items, running])
 
   const setOption = async (key: string, value: string) => {
@@ -404,7 +399,6 @@ export function TaskView({
                   item={item}
                   agent={agent}
                   showRole={false}
-                  live={item.itemId === stream.caretItem}
                   disabled={busy}
                   onRespond={respond}
                 />
@@ -416,13 +410,12 @@ export function TaskView({
               item={entry.item}
               agent={agent}
               showRole={entry.showRole}
-              live={entry.item.itemId === stream.caretItem}
               disabled={busy}
               onRespond={respond}
             />
           )
         )}
-        {running && stream.activity && !error ? (
+        {running && activity && !error ? (
           <p className="thinking">
             <i className="spin" aria-hidden="true" />
             <span>{stream.activity}</span>
@@ -631,14 +624,12 @@ function Item({
   item,
   agent,
   showRole,
-  live = false,
   disabled,
   onRespond
 }: {
   item: HistoryItem
   agent?: string
   showRole: boolean
-  live?: boolean
   disabled: boolean
   onRespond: Respond
 }) {
@@ -664,7 +655,6 @@ function Item({
         {showRole ? <div className="role">{body.role === 'user' ? '你' : (agent ?? 'agent')}</div> : null}
         <div className="body">
           {body.role === 'user' ? text : <Markdown text={text} />}
-          {live && body.role === 'assistant' ? <span className="caret" aria-hidden="true" /> : null}
         </div>
       </div>
     )
