@@ -342,7 +342,7 @@ export function Board({
 
 function markForState(state: string): string {
   if (state === 'working') {
-    return '●'
+    return '✳'
   }
   if (state === 'attention') {
     return '!'
