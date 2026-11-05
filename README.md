@@ -177,6 +177,7 @@ hub 是转发器，不是翻译器：它只维护 id 归属、订阅表和 gatew
 | `apps/server/src/hub.ts` | 请求路由、流广播、gateway 重连后的重放 |
 | `apps/server/src/http-app.ts` | 登录、会话、健康检查、静态页面 |
 | `apps/gateway/src/main.ts` | 家里 gateway 入口 |
+| `apps/gateway/src/local-admin-server.ts` | 回环管理页：配对码、hub 地址/key、连接状态 |
 | `apps/gateway/src/hub-link.ts` | 到 VPS 的外连、鉴权、退避、存活判定 |
 | `apps/gateway/src/orca-bridge.ts` | 一条活的 Orca 连接：重连、能力重播、订阅重放 |
 | `src/gateway/orca/e2ee-v2-client.ts` | E2EE v2 握手与封包 |
@@ -222,6 +223,17 @@ Windows 上：`scripts/gateway-loop.cmd` 循环运行 gateway（退出后 10 秒
 `scripts/gateway-autostart.vbs` 把它隐藏启动；把后者放进用户的启动文件夹即可开机自启。
 用登录触发是刻意的——gateway 必须和桌面 Orca 是同一个用户，才能读到它的配对材料、连到
 `127.0.0.1`。
+
+Gateway 同时开着一个**本机管理页**：`http://127.0.0.1:8790`（默认，`ORCA_WEB_ADMIN_PORT` 或
+`admin.port` 可换）。在浏览器里就能做三件事：看 hub / Orca 连接状态、改 hub 地址和 gateway
+key、粘贴桌面 Orca 生成的 `orca://pair?code=…` 配对码——不再需要手改配置文件。改动即时生效
+（校验 → 写入配置文件 → 原地换连接，失败则进程退出交给启动循环恢复），所以换配对连手机都不
+用碰。
+
+信任边界没有被这个页面破坏：它只绑 `127.0.0.1`，别的机器进不来；配对码（等于 Orca 凭据）只在
+同一台机器的浏览器和 gateway 之间走，**不经过 VPS**；POST 还要过同源检查（Origin +
+`Sec-Fetch-Site` + 自定义头），别的网站在你的浏览器里也伪造不了请求。唯一的前提是 gateway 用
+`--config` 启动——配置有落盘的地方，改动能持久。
 
 ---
 

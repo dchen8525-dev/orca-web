@@ -34,6 +34,10 @@ export class HubLink {
     void this.run()
   }
 
+  isConnected(): boolean {
+    return this.socket !== null
+  }
+
   stop(): void {
     this.stopped = true
     this.stopPing()

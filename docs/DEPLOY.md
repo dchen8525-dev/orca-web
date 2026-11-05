@@ -64,7 +64,13 @@ Get the last two by pairing a `mobile`-scope device in Orca and copying `endpoin
 config file at `0600` and out of git. Revoke the device in Orca if the file leaks.
 
 Run it under systemd (or Task Scheduler on Windows) beside desktop Orca. It never listens on a
-port, so no router or firewall change is needed at home.
+public port, so no router or firewall change is needed at home.
+
+The gateway opens one loopback-only page at `http://127.0.0.1:8790` (`admin.port` or
+`ORCA_WEB_ADMIN_PORT` moves it): connection status, hub address/key, and a box for a fresh
+`orca://pair?code=…`. Changes load in place — validate, write the config file, swap the
+connections — and the process restarts itself if a swap fails. Run the gateway with `--config`
+so the page has somewhere to persist what you type.
 
 ## Checks
 

@@ -1,30 +1,53 @@
 // Entry point: gateway runs beside desktop Orca on the home machine and dials the VPS hub.
-import { describeConfig, loadConfig } from './config.ts'
+// A loopback admin page lets the user re-pair or move hubs without editing files by hand.
+import {
+  applyConfigUpdate,
+  describeConfig,
+  describeConfigSource,
+  loadConfig,
+  type GatewayConfig
+} from './config.ts'
+import { LocalAdminServer } from './local-admin-server.ts'
 import { HubLink } from './hub-link.ts'
 import { OrcaBridge } from './orca-bridge.ts'
 
 const args = parseArgs(process.argv.slice(2))
-const config = loadConfig({ configPath: args.config, localOrca: args.localOrca })
+let config = loadConfig({ configPath: args.config, localOrca: args.localOrca })
 
 log(`orca-web gateway starting`)
 log(describeConfig(config))
 
-const bridge = new OrcaBridge(config.orca)
-bridge.onEvent((event) => {
-  if (event.kind === 'state') {
-    log(`orca ${event.state}${event.message ? `: ${event.message}` : ''}`)
+let runtime = createRuntime(config)
+
+const admin = new LocalAdminServer({
+  port: config.adminPort,
+  status: () => ({
+    gatewayId: config.gatewayId,
+    configPath: config.configPath,
+    pairedVia: config.pairedVia,
+    hubUrl: config.serverUrl,
+    hubConnected: runtime.hub.isConnected(),
+    orcaState: runtime.bridge.getState(),
+    orcaDescriptor: runtime.bridge.getDescriptor(),
+    configNote: describeConfigSource(config)
+  }),
+  // Validation errors must not kill the process; a swap failure is a broken state, so the
+  // process exits and the restart loop brings it up on the already-persisted config.
+  apply: async (updates) => {
+    const next = applyConfigUpdate(config, updates)
+    try {
+      await swapRuntime(next)
+    } catch (error) {
+      log(`swap failed, restarting to recover: ${(error as Error).message}`)
+      setTimeout(() => process.exit(3), 500).unref()
+      throw error
+    }
+    config = next
+    log(describeConfig(config))
+    return '已写入新配置，网关正在用新配置重连。'
   }
 })
-bridge.start()
-
-const hub = new HubLink({
-  url: config.serverUrl,
-  key: config.gatewayKey,
-  gatewayId: config.gatewayId,
-  bridge,
-  log
-})
-hub.start()
+admin.start()
 
 let shuttingDown = false
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -34,11 +57,45 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     }
     shuttingDown = true
     log(`${signal}: shutting down`)
-    hub.stop()
-    void bridge.stop().finally(() => process.exit(0))
+    admin.stop()
+    runtime.hub.stop()
+    void runtime.bridge.stop().finally(() => process.exit(0))
     // A hung socket must not keep the process alive.
     setTimeout(() => process.exit(0), 3_000).unref()
   })
+}
+
+type Runtime = { bridge: OrcaBridge; hub: HubLink }
+
+function createRuntime(next: GatewayConfig): Runtime {
+  const bridge = new OrcaBridge(next.orca)
+  bridge.onEvent((event) => {
+    if (event.kind === 'state') {
+      log(`orca ${event.state}${event.message ? `: ${event.message}` : ''}`)
+    }
+  })
+  return {
+    bridge,
+    hub: new HubLink({
+      url: next.serverUrl,
+      key: next.gatewayKey,
+      gatewayId: next.gatewayId,
+      bridge,
+      log
+    })
+  }
+}
+
+async function swapRuntime(next: GatewayConfig): Promise<void> {
+  const replacement = createRuntime(next)
+  runtime.hub.stop()
+  await Promise.race([
+    runtime.bridge.stop(),
+    new Promise((resolve) => setTimeout(resolve, 5_000).unref())
+  ])
+  runtime = replacement
+  runtime.bridge.start()
+  runtime.hub.start()
 }
 
 function parseArgs(argv: string[]): { config?: string; localOrca: boolean } {
