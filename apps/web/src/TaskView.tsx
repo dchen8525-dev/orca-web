@@ -326,6 +326,7 @@ export function TaskView({
         <h1>{title}</h1>
         <div className="byline">
           <span className={`pill${tone === 'green' ? ' pill-green' : tone === 'amber' ? ' pill-amber' : ''}`}>
+            {running ? <i className="spin" aria-hidden="true" /> : null}
             {stateLabel(state)}
           </span>
           {options ? (

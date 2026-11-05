@@ -301,6 +301,7 @@ export function Board({
                     </span>
                     {task.detail ? <span className="task-detail">{task.detail}</span> : null}
                     <span className="task-foot">
+                      {task.state === 'working' ? <i className="spin" aria-hidden="true" /> : null}
                       <span className="state">{stateLabel(task.state)}</span>
                       <span className="sep">/</span>
                       <span>{task.agent ?? 'agent'}</span>

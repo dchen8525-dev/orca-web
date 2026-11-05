@@ -483,6 +483,31 @@ textarea {
   color: var(--muted);
 }
 
+/* live ring next to “进行中”: a thin arc circle, hand-drawn-weight, slow enough to read */
+.spin {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border: 1.5px solid rgba(63, 107, 82, 0.28);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: spin 1.15s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
 .task-working .task-foot .state {
   color: var(--green);
 }
@@ -608,6 +633,12 @@ button.pill::after {
   color: var(--green);
   border-color: rgba(63, 107, 82, 0.4);
   background: rgba(63, 107, 82, 0.06);
+}
+
+.pill .spin {
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
 }
 
 .pill-amber {
