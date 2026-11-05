@@ -308,7 +308,7 @@ textarea {
 }
 
 .dot-live {
-  animation: halo 2.6s ease-out infinite;
+  animation: breathe 2.4s ease-in-out infinite;
 }
 
 .kicker .right {
@@ -491,25 +491,14 @@ textarea {
   transition: background-color 0.4s ease;
 }
 
-/* the running state is alive: the mark sheds a slow halo */
+/* the running state is alive: the mark itself breathes, no spreading ring */
 .task-working .task-mark {
   color: var(--green);
-  border-radius: 50%;
-  animation: halo 2.6s ease-out infinite;
+  animation: breathe 2.4s ease-in-out infinite;
 }
 
 .task-attention .task-mark {
   color: var(--accent);
-}
-
-@keyframes halo {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(63, 107, 82, 0.3);
-  }
-  55% {
-    box-shadow: 0 0 0 6px rgba(63, 107, 82, 0);
-  }
 }
 
 .task:active {
