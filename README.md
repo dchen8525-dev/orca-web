@@ -98,6 +98,11 @@ hub 在这里**只做转发和 id 重映射**，不改写结果结构，所以�
 新建任务则先对每个候选 agent 调 `agentSession.createSupport` 探测；`create` 的
 `expectedRuntimeFence` 是 `null`，语义是“这个会话现在还不该存在”，可选携带第一条消息。
 
+**会话设置（换模型 / 改权限）**：`agentSession.options` 读出模型目录与当前选择，任务页头部显示
+两个胶囊（当前模型、当前权限）；点开一个面板，`agentSession.setOption`（key：`model` /
+`permissionMode`，权限值：`ask` / `accept-edits` / `auto` / `full-access` / `own`）带同样的
+envelope 写入，成功后重取 history 和 options。改动从下一回合生效。
+
 ### 5. 中止
 
 `agentSession.cancel`，如果已经从状态里读到当前回合，就带上它的 turn id；读不到时交给 Orca
