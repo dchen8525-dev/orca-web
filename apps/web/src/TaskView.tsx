@@ -418,7 +418,7 @@ export function TaskView({
         {running && activity && !error ? (
           <p className="thinking">
             <i className="spin" aria-hidden="true" />
-            <span>{stream.activity}</span>
+            <span>{activity}</span>
             <span className="think-dots" aria-hidden="true">
               <i />
               <i />
