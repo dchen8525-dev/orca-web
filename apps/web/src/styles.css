@@ -10,10 +10,9 @@
   --accent: #a8492a;
   --green: #3f6b52;
   --red: #8f2f22;
-  --serif: Georgia, 'Times New Roman', 'Songti SC', 'Source Han Serif SC', 'Noto Serif SC',
-    SimSun, serif;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
-    sans-serif;
+  --serif: 'Noto Serif SC', Georgia, 'Songti SC', 'Source Han Serif SC', SimSun, serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC',
+    'MiSans', 'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
   color-scheme: light;
 }
@@ -76,7 +75,7 @@ textarea {
   display: grid;
   place-items: center;
   height: 100%;
-  font: italic 14px/1.6 var(--serif);
+  font: 400 14px/1.6 var(--serif);
   color: var(--faint);
   animation: rise 0.5s ease both;
 }
@@ -472,7 +471,7 @@ textarea {
   gap: 4px 14px;
   margin: 10px 0 2px;
   padding: 0;
-  font: italic 13px/1.6 var(--serif);
+  font: 400 13px/1.6 var(--serif);
   color: var(--muted);
   animation: rise 0.25s ease both;
 }
@@ -537,7 +536,7 @@ textarea {
 
 .worktree-no-tasks {
   margin: 4px 0 8px;
-  font: italic 12.5px/1.6 var(--serif);
+  font: 400 12.5px/1.6 var(--serif);
   color: var(--faint);
 }
 
@@ -944,7 +943,7 @@ button.pill::after {
   align-items: center;
   gap: 7px;
   margin: -4px 0 26px;
-  font: italic 13.5px/1.6 var(--serif);
+  font: 400 13.5px/1.6 var(--serif);
   color: var(--green);
   animation: rise 0.3s ease both;
 }
@@ -1072,7 +1071,6 @@ button.pill::after {
   padding-left: 12px;
   color: var(--muted);
   border-left: 2px solid var(--rule-strong);
-  font-style: italic;
 }
 
 .md a {
@@ -1334,7 +1332,7 @@ button.pill::after {
   padding: 8px 0;
   margin-bottom: 12px;
   outline: none;
-  font: italic 14px/1.5 var(--serif);
+  font: 400 14px/1.5 var(--serif);
   color: var(--ink);
   resize: none;
 }
@@ -1369,7 +1367,7 @@ button.pill::after {
   background: none;
   padding: 6px 0;
   outline: none;
-  font: italic 15px/1.5 var(--serif);
+  font: 400 15px/1.5 var(--serif);
   color: var(--ink);
   max-height: 30vh;
 }
@@ -1723,7 +1721,7 @@ button.pill::after {
   margin: 0;
   padding: 44px 0;
   text-align: center;
-  font: italic 14px/1.6 var(--serif);
+  font: 400 14px/1.6 var(--serif);
   color: var(--faint);
   animation: breathe 2.2s ease-in-out infinite;
 }
