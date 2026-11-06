@@ -59,6 +59,19 @@ export function Board({
   const [loading, setLoading] = useState(false)
   const [creatingIn, setCreatingIn] = useState<WorktreeRow | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [folded, setFolded] = useState<Set<string>>(new Set())
+
+  const toggleFolded = useCallback((name: string) => {
+    setFolded((previous) => {
+      const next = new Set(previous)
+      if (next.has(name)) {
+        next.delete(name)
+      } else {
+        next.add(name)
+      }
+      return next
+    })
+  }, [])
 
   const load = useCallback(
     async (quiet = false) => {
@@ -270,55 +283,108 @@ export function Board({
         {error ? <p className="error">{error}</p> : null}
         {loading && worktrees.length === 0 ? <p className="empty">载入中…</p> : null}
 
-        {visible.map((group) => (
-          <section key={group.name} className="project">
-            <div className="project-head">
-              <span className="no">{String(group.index + 1).padStart(2, '0')}</span>
-              <h2>{group.name}</h2>
-              <span className="count">
-                {group.worktrees.reduce((sum, row) => sum + row.tasks.length, 0)} 条
-              </span>
-            </div>
-            {group.worktrees.map((row) => (
-              <div key={row.worktree.worktreeId}>
-                <div className="worktree-line">
-                  <span>⑂</span>
-                  <span className="branch">{row.branch || row.label}</span>
-                  <button className="new" onClick={() => setCreatingIn(row.worktree)}>
-                    新建
-                  </button>
-                </div>
-                {row.tasks.length === 0 ? (
-                  <p className="worktree-no-tasks">这里还没有任务。</p>
-                ) : null}
-                {row.tasks.map((task) => (
-                  <button
-                    key={task.key}
-                    className={`task task-${task.state}`}
-                    onClick={() => onOpenTask(task.target)}
-                  >
-                    <span className="task-head">
-                      <span className="task-mark">{markForState(task.state)}</span>
-                      <span className="task-body">
-                        <span className="task-title">{task.title}</span>
-                      </span>
-                    </span>
-                    {task.detail ? <span className="task-detail">{task.detail}</span> : null}
-                    <span className="task-foot">
-                      {task.state === 'working' ? <i className="spin" aria-hidden="true" /> : null}
-                      <span className="state">{stateLabel(task.state)}</span>
-                      <span className="sep">/</span>
-                      <span>{task.agent ?? 'agent'}</span>
-                      {task.updatedAt ? (
-                        <span className="time">{relativeTime(task.updatedAt)}</span>
-                      ) : null}
-                    </span>
-                  </button>
-                ))}
+        {visible.map((group) => {
+          const isFolded = folded.has(group.name)
+          const summary = summaryFor(group)
+          return (
+            <section key={group.name} className="project">
+              <div
+                className={isFolded ? 'project-head folded' : 'project-head'}
+                role="button"
+                tabIndex={0}
+                aria-expanded={!isFolded}
+                onClick={() => toggleFolded(group.name)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    toggleFolded(group.name)
+                  }
+                }}
+              >
+                <span className="no">{String(group.index + 1).padStart(2, '0')}</span>
+                <h2>{group.name}</h2>
+                <span className="count">
+                  {group.worktrees.reduce((sum, row) => sum + row.tasks.length, 0)} 条
+                </span>
+                <span className="twist" aria-hidden="true">
+                  ▾
+                </span>
               </div>
-            ))}
-          </section>
-        ))}
+              {isFolded ? (
+                <p className="project-summary">
+                  {summary.total === 0 ? (
+                    '还没有任务'
+                  ) : (
+                    <>
+                      {summary.working > 0 ? (
+                        <span className="s-item">
+                          <i className="sdot sdot-green" aria-hidden="true" />
+                          {summary.working} 进行中
+                        </span>
+                      ) : null}
+                      {summary.attention > 0 ? (
+                        <span className="s-item">
+                          <i className="sdot sdot-amber" aria-hidden="true" />
+                          {summary.attention} 待确认
+                        </span>
+                      ) : null}
+                      {summary.idle > 0 ? (
+                        <span className="s-item">
+                          <i className="sdot sdot-grey" aria-hidden="true" />
+                          {summary.idle} 空闲
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                  {summary.latest ? (
+                    <span className="s-latest">{relativeTime(summary.latest)}</span>
+                  ) : null}
+                </p>
+              ) : (
+                group.worktrees.map((row) => (
+                  <div key={row.worktree.worktreeId}>
+                    <div className="worktree-line">
+                      <span>⑂</span>
+                      <span className="branch">{row.branch || row.label}</span>
+                      <button className="new" onClick={() => setCreatingIn(row.worktree)}>
+                        新建
+                      </button>
+                    </div>
+                    {row.tasks.length === 0 ? (
+                      <p className="worktree-no-tasks">这里还没有任务。</p>
+                    ) : null}
+                    {row.tasks.map((task) => (
+                      <button
+                        key={task.key}
+                        className={`task task-${task.state}`}
+                        onClick={() => onOpenTask(task.target)}
+                      >
+                        <span className="task-head">
+                          <span className="task-mark">{markForState(task.state)}</span>
+                          <span className="task-body">
+                            <span className="task-title">{task.title}</span>
+                          </span>
+                        </span>
+                        {task.detail ? <span className="task-detail">{task.detail}</span> : null}
+                        <span className="task-foot">
+                          {task.state === 'working' ? (
+                            <i className="spin" aria-hidden="true" />
+                          ) : null}
+                          <span className="state">{stateLabel(task.state)}</span>
+                          <span className="sep">/</span>
+                          <span>{task.agent ?? 'agent'}</span>
+                          {task.updatedAt ? (
+                            <span className="time">{relativeTime(task.updatedAt)}</span>
+                          ) : null}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </section>
+          )
+        })}
 
         {status.gatewayConnected && worktrees.length > 0 && visible.length === 0 ? (
           <p className="empty">这一栏暂时是空的。</p>
@@ -352,6 +418,22 @@ function markForState(state: string): string {
     return '!'
   }
   return '·'
+}
+
+function summaryFor(group: {
+  worktrees: { tasks: BoardTask[] }[]
+}): { working: number; attention: number; idle: number; total: number; latest?: number } {
+  const tasks = group.worktrees.flatMap((row) => row.tasks)
+  const working = tasks.filter((task) => task.state === 'working').length
+  const attention = tasks.filter((task) => task.state === 'attention').length
+  const latest = tasks.reduce((max, task) => Math.max(max, task.updatedAt ?? 0), 0)
+  return {
+    working,
+    attention,
+    idle: tasks.length - working - attention,
+    total: tasks.length,
+    latest: latest || undefined
+  }
 }
 
 function firstLine(value: string): string {

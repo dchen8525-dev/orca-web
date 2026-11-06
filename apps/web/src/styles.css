@@ -425,6 +425,9 @@ textarea {
   gap: 10px;
   padding-bottom: 7px;
   border-bottom: 1px solid var(--rule-strong);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .project-head .no {
@@ -446,6 +449,62 @@ textarea {
   margin-left: auto;
   flex: none;
   font: 400 10px/1 var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.project-head .twist {
+  flex: none;
+  font: 400 9px/1 var(--mono);
+  color: var(--faint);
+  transition: transform 0.2s ease;
+}
+
+.project-head.folded .twist {
+  transform: rotate(-90deg);
+}
+
+/* folded projects keep one quiet line: what is running, what is waiting, last heartbeat */
+.project-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 10px 0 2px;
+  padding: 0;
+  font: italic 13px/1.6 var(--serif);
+  color: var(--muted);
+  animation: rise 0.25s ease both;
+}
+
+.s-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-summary .sdot {
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.sdot-green {
+  background: var(--green);
+}
+
+.sdot-amber {
+  background: #b07d24;
+}
+
+.sdot-grey {
+  background: var(--faint);
+}
+
+.project-summary .s-latest {
+  margin-left: auto;
+  font: 400 9.5px/1 var(--mono);
   letter-spacing: 0.06em;
   color: var(--faint);
 }
@@ -486,9 +545,25 @@ textarea {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 12px 0 13px;
-  border-bottom: 1px solid var(--rule);
-  transition: background-color 0.4s ease;
+  padding: 12px 14px 13px;
+  margin-bottom: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(60, 48, 30, 0.05);
+  transition:
+    background-color 0.4s ease,
+    border-color 0.25s ease,
+    transform 0.12s ease;
+}
+
+.task:last-of-type {
+  margin-bottom: 12px;
+}
+
+@media (hover: hover) {
+  .task:hover {
+    border-color: var(--rule-strong);
+  }
 }
 
 /* the running state flickers like a lit spark: flare, settle, flare again */
@@ -523,7 +598,7 @@ textarea {
   opacity: 0.6;
 }
 
-/* state bands: green is running, terracotta is waiting on you, grey is nothing happening.
+/* state cards: green is running, terracotta is waiting on you, grey is nothing happening.
    All three stay far below text contrast so the ink still does the talking. */
 
 .task-idle {
@@ -538,7 +613,18 @@ textarea {
   animation: sheen 9s linear infinite;
 }
 
+@media (hover: hover) {
+  .task-working:hover {
+    border-color: rgba(63, 107, 82, 0.38);
+  }
+
+  .task-attention:hover {
+    border-color: rgba(168, 73, 42, 0.45);
+  }
+}
+
 .task-working {
+  border-color: rgba(63, 107, 82, 0.28);
   background-color: rgba(63, 107, 82, 0.09);
   background-image: linear-gradient(
     100deg,
@@ -551,6 +637,7 @@ textarea {
 }
 
 .task-attention {
+  border-color: rgba(168, 73, 42, 0.32);
   background-color: rgba(168, 73, 42, 0.05);
   animation: appeal 3.6s ease-in-out infinite;
 }
