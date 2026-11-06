@@ -222,12 +222,43 @@ npm run gateway
 
 ## 部署
 
-VPS 上 Caddy + systemd，家里用自启脚本让 gateway 常驻，具体步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+两台机器、两个进程；凭据和主机名不进仓库，一次性初始化见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+日常更新只跑两行：
 
-Windows 上：`scripts/gateway-loop.cmd` 循环运行 gateway（退出后 10 秒重起），
-`scripts/gateway-autostart.vbs` 把它隐藏启动；把后者放进用户的启动文件夹即可开机自启。
-用登录触发是刻意的——gateway 必须和桌面 Orca 是同一个用户，才能读到它的配对材料、连到
-`127.0.0.1`。
+```bash
+bash scripts/deploy-web.sh      # 前端改动后：tc + build + scp + 原子换 dist + 校验 hash
+bash scripts/deploy-server.sh   # 改了 apps/server、apps/gateway、src/shared 后：tc + scp 源码 + 重启服务 + health
+```
+
+两个脚本都走 ssh 别名 `orca-web`（定义在运维机的 `~/.ssh/config`，`ORCA_WEB_SSH` 环境变量可覆盖）。
+`npm run tc`（server/gateway/scripts 的 strict typecheck + 前端 typecheck）与 TypeScript/CI
+（`.github/workflows/ci.yml`）是同一道闸，部署脚本会再跑一遍，不要绕过。
+
+要点：
+
+- **服务端没有构建产物**：VPS 上的 Node 24 直接跑 `apps/server/src/main.ts`（TS 类型剥除），
+  所以"部署服务端"就是把源码同步过去并 `systemctl restart orca-web.service`。
+- **静态目录是 `/opt/orca-web/apps/web/dist`**：`deploy-web.sh` 换上去前把旧目录留在原地
+  `dist.bak-<时间戳>`，回滚就是 `mv` 回来；`deploy-server.sh` 会先打 `src-backup-<时间戳>.tgz`。
+- **验证**：部署完看 `https://<域名>/api/health`（要 `"gateway":{"connected":true,…}`）；
+  `deploy-web.sh` 结尾会确认线上 assets 里有刚构建的 `index-*.css/js` 哈希，缺了即报错退出。
+- **看日志**：VPS `journalctl -u orca-web.service -f`；前端是纯静态文件，无日志。
+
+### 家里 gateway 的常驻（Windows，本机现状）
+
+1. 配置在 `%APPDATA%\orca-web\gateway.json`：hub 地址（`wss://…/gateway`）、gatewayKey、
+   Orca 配对材料（`deviceToken` / `hostPublicKeyB64`）。`0600` 之外别放松——里面是 bearer 凭据。
+2. `scripts\gateway-loop.cmd`：无限循环 `node apps\gateway\src\main.ts --config
+   %APPDATA%\orca-web\gateway.json`，进程退出后 10 秒重启，日志落在仓库的 `logs\gateway.log`。
+3. `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\orca-web-gateway.vbs`
+   （模板是 `scripts\gateway-autostart.vbs`）：登录时无窗口拉起上面的 loop。
+4. **用登录触发是刻意的**：gateway 必须和桌面 Orca 同用户，才读得到配对材料、连得上
+   `127.0.0.1` 的 Orca 端点——服务/计划任务以其他身份跑反而拿不到凭据。
+
+排查顺序：`logs\gateway.log`（家里）→ `journalctl -u orca-web.service`（VPS）→
+浏览器登录页的连接状态条。改 hub 地址、gatewayKey 或换配对码不用碰文件，开
+`http://127.0.0.1:8790`（gateway 的本机管理页，端口 `ORCA_WEB_ADMIN_PORT` 可换）。
+其余步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
 Gateway 同时开着一个**本机管理页**：`http://127.0.0.1:8790`（默认，`ORCA_WEB_ADMIN_PORT` 或
 `admin.port` 可换）。在浏览器里就能做三件事：看 hub / Orca 连接状态、改 hub 地址和 gateway
