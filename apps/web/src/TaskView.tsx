@@ -75,9 +75,9 @@ export function TaskView({
   const scrollRef = useRef<HTMLDivElement>(null)
   // The tab strip / app switcher should name the task, not say "orca" five times.
   useEffect(() => {
-    document.title = `${liveTitle ?? title} · orca`
+    document.title = `${liveTitle ?? title} · orca 工作台`
     return () => {
-      document.title = 'orca'
+      document.title = 'orca 工作台'
     }
   }, [liveTitle, title])
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

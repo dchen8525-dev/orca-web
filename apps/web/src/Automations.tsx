@@ -83,9 +83,9 @@ export function Automations({
   }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    document.title = '定时 · orca'
+    document.title = '定时 · orca 工作台'
     return () => {
-      document.title = 'orca'
+      document.title = 'orca 工作台'
     }
   }, [])
 
