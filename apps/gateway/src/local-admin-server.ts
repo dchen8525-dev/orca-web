@@ -278,7 +278,12 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 <script>
   var keyShown = false;
   function setText(id, text) { document.getElementById(id).textContent = text; }
-  function setDot(id, state) { document.getElementById(id).className = 'dot ' + state; }
+  function setDot(id, state) {
+    var el = document.getElementById(id);
+    el.className = 'dot ' + state;
+    // Reserved placeholder dots hide with an inline style; a real state must always show.
+    el.style.visibility = 'visible';
+  }
   function setChip(id, text, state) {
     var el = document.getElementById(id);
     el.textContent = text;
