@@ -235,8 +235,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       <span class="chip" id="hub-chip">读状态中…</span>
     </div>
     <div class="row"><span class="label">状态</span><span id="hub-dot" class="dot"></span><span id="hub-value" class="value muted">读状态中…</span></div>
-    <div class="row"><span class="label">服务器</span><span id="hub-url" class="value mono">—</span></div>
-    <div class="row"><span class="label">gateway key</span><span id="hub-key" class="value mono">••••••••••</span><button id="key-eye" class="ghost-inline" type="button">👁 显示</button></div>
+    <div class="row"><span class="label">服务器</span><span class="dot" style="visibility:hidden"></span><span id="hub-url" class="value mono">—</span></div>
+    <div class="row"><span class="label">gateway key</span><span class="dot" style="visibility:hidden"></span><span id="hub-key" class="value mono">••••••••••</span><button id="key-eye" class="ghost-inline" type="button">👁 显示</button></div>
     <div id="hub-form" hidden>
       <p class="form-note">换服务器或换 key。地址 + key 两样都填才会全部替换；只填一个就只改一个。保存后立刻重拨。</p>
       <input id="server-url" placeholder="wss://服务器域名/gateway" autocomplete="off" />
@@ -252,8 +252,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       <p class="field-label" style="margin:0">桌面 Orca 配对 <span class="card-sub">gateway ↔ 这台电脑的 Orca</span></p>
       <span class="chip" id="orca-chip">读状态中…</span>
     </div>
-    <div class="row"><span class="label">配对状态</span><span id="pair-state" class="value muted">读状态中…</span></div>
-    <div class="row"><span class="label">Orca 连接</span><span id="orca-dot" class="dot" style="visibility:hidden"></span><span id="orca-value" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">配对状态</span><span id="pair-dot" class="dot" style="visibility:hidden"></span><span id="pair-state" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">Orca 连接</span><span class="dot" style="visibility:hidden"></span><span id="orca-value" class="value muted">读状态中…</span></div>
     <div class="row"><span class="label">配对写入</span><span id="pair-via" class="value muted">—</span></div>
     <div id="pair-form" hidden>
       <p class="form-note">粘贴新配对码 = <b>替换现有配对</b>。旧设备可在桌面 Orca 的设置里撤销；正常在用就不需要重新配对。</p>
@@ -324,22 +324,24 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     var version = desc.appVersion ? 'Orca ' + desc.appVersion : null;
     var machine = desc.machineName || null;
     var orcaIdent = [version, machine].filter(Boolean).join(' · ');
-    var pairedText;
     if (orcaLive) {
       setChip('orca-chip', '在线', 'chip-on');
-      pairedText = machine ? '已配对，正在和 ' + machine + ' 上的 Orca 通信' : '已配对，正在通信';
+      setDot('pair-dot', 'on');
+      setText('pair-state', machine ? '已配对，正在和 ' + machine + ' 上的 Orca 通信' : '已配对，正在通信');
     } else if (orcaIdent) {
       setChip('orca-chip', '离线', 'chip-warn');
-      pairedText = '已配对，但 Orca 现在没连上——桌面 Orca 开机/打开了吗？';
+      setDot('pair-dot', 'warn');
+      setText('pair-state', '已配对，但 Orca 现在没连上——桌面 Orca 开机/打开了吗？');
     } else if (status.pairedVia === 'local-orca') {
       setChip('orca-chip', '等待', 'chip-warn');
-      pairedText = '本轮用桌面 Orca 的本地配对材料读取，还未走通连接';
+      setDot('pair-dot', 'warn');
+      setText('pair-state', '本轮用桌面 Orca 的本地配对材料读取，还未走通连接');
     } else {
       setChip('orca-chip', '未配对', 'chip-off');
-      pairedText = '还没有配对材料';
+      setDot('pair-dot', 'off');
+      setText('pair-state', '还没有配对材料');
     }
-    setDot('orca-dot', orcaLive ? 'on' : orcaIdent ? 'off' : 'warn');
-    setText('pair-state', pairedText);
+    setText('orca-value', orcaIdent || '还没有读到 Orca 的信息');
     setText('orca-value', orcaIdent || '还没有读到 Orca 的信息');
     setText('pair-via', status.pairedVia === 'local-orca' ? '本地配对材料' : '配置文件（gateway.json）');
 
