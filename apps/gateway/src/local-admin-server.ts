@@ -198,7 +198,9 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   .dek { margin: 0 0 26px; color: var(--muted); font-size: 13.5px; }
   .card { border: 1px solid var(--rule-strong); background: #fffdf9; padding: 16px 18px; margin-bottom: 18px; }
   .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-  .card-sub { text-transform: none; letter-spacing: 0.04em; color: var(--muted); font-weight: 400; }
+  .title-help { display: inline-block; position: relative; width: 13px; height: 13px; line-height: 11px; text-align: center; margin-left: 7px; border-radius: 50%; border: 1px solid var(--rule-strong); color: var(--muted); font-size: 9px; text-transform: none; letter-spacing: 0; cursor: help; }
+  .title-help::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--paper); font: 500 11px/1.6 var(--sans); letter-spacing: 0; text-transform: none; text-align: left; width: max-content; max-width: 280px; padding: 8px 12px; border-radius: 6px; box-shadow: 0 6px 18px rgba(60, 48, 30, 0.25); opacity: 0; pointer-events: none; transition: opacity 0.15s ease; z-index: 5; }
+  .title-help:hover::after { opacity: 1; }
   .chip { flex: none; font: 500 10px/1 sans-serif; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 9px; border: 1px solid var(--rule-strong); color: var(--muted); }
   .chip-on { color: var(--green); border-color: rgba(63, 107, 82, 0.4); background: rgba(63, 107, 82, 0.06); }
   .chip-off { color: var(--red); border-color: rgba(143, 47, 34, 0.35); background: rgba(143, 47, 34, 0.05); }
@@ -242,7 +244,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
   <section class="card" id="card-hub">
     <div class="card-head">
-      <p class="field-label" style="margin:0">hub 连接 <span class="card-sub">gateway ↔ 远端服务器</span></p>
+      <p class="field-label" style="margin:0">hub 连接<span class="title-help" data-tip="gateway ↔ 远端服务器：本机 gateway 主动拨向 VPS，手机网页的一切经它转发">?</span></p>
       <span class="chip" id="hub-chip">读状态中…</span>
     </div>
     <div class="row"><span class="label">状态</span><span id="hub-dot" class="dot"></span><span id="hub-value" class="value muted">读状态中…</span></div>
@@ -259,7 +261,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
   <section class="card" id="card-orca">
     <div class="card-head">
-      <p class="field-label" style="margin:0">桌面 Orca 配对 <span class="card-sub">gateway ↔ 这台电脑的 Orca</span></p>
+      <p class="field-label" style="margin:0">桌面 Orca 配对<span class="title-help" data-tip="gateway ↔ 这台电脑的 Orca：经本机回环口与桌面 Orca 通信，不出这台机器">?</span></p>
       <span class="chip" id="orca-chip">读状态中…</span>
     </div>
     <div class="row"><span class="label">配对状态</span><span id="pair-dot" class="dot" style="visibility:hidden"></span><span id="pair-state" class="value muted">读状态中…</span></div>
