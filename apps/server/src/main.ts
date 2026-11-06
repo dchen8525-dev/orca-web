@@ -12,7 +12,7 @@ import { SessionStore } from './sessions.ts'
 
 const args = parseArgs(process.argv.slice(2))
 if (args.initConfig) {
-  await initConfig(args.initConfig, args.publicOrigin)
+  initConfig(args.initConfig, args.publicOrigin)
   process.exit(0)
 }
 const config = loadServerConfig(args.config)
@@ -99,7 +99,8 @@ function parseArgs(argv: string[]): { config?: string; initConfig?: string; publ
 }
 
 // bootstrap/deb 专用：生成 server.json（永不覆盖已有配置），密码只在这里显示一次。
-async function initConfig(outPath: string, publicOrigin?: string): Promise<void> {
+// bootstrap/deb 专用：生成 server.json（永不覆盖已有配置），密码只在这里显示一次。
+function initConfig(outPath: string, publicOrigin?: string): void {
   if (existsSync(outPath)) {
     throw new Error(`配置已存在，拒绝覆盖: ${outPath}`)
   }
