@@ -229,7 +229,7 @@ npm run gateway
 | artifact | 用途 |
 |---|---|
 | `orca-server-linux-amd64.deb` | hub：二进制 + 静态页 + systemd unit，`dpkg -i` 即装即升 |
-| `orca-gateway-windows-x64.exe` | 家里 gateway：免装 Node，双击进管理页 |
+| `orca-gateway-windows-x64.exe` | 家里 gateway：免装 Node（**先跑 bootstrap-gateway.ps1 安装**，见下） |
 | `orca-web-release.tar.gz` | 手动兜底（非 deb 主机）；`.sha256` 校验用 |
 
 从零安装（各一条命令，都可以在任何一台新机器上开始）：
@@ -250,6 +250,12 @@ powershell scripts\bootstrap-gateway.ps1 -FromRelease
 首次安装的登录密码和 gateway key 只打印一次（VPS 在 `dpkg -i` 输出 / 初始化日志里）。
 家里唯一的"手工"步骤：在 `http://127.0.0.1:8790` 的本机管理页把打印出的 gatewayKey 贴进去，
 再粘贴桌面 Orca 生成的 `orca://pair?code=…` 配对码。已有配置不会被覆盖，升级就是重装覆盖二进制。
+
+`orca-gateway-windows-x64.exe` 本身不是安装器：直接从 Releases 下载到桌面双击，它拿不到配置路径，
+只会读取空配置、打开管理页。管理页也会写配置，于是设置会落到桌面旁边的文件里，而不是
+`%APPDATA%\orca-web`，自启的 loop 看不到。要临时在管理页改配置，用
+`orca-gateway-windows-x64.exe --config "%APPDATA%\orca-web\gateway.json"`；
+要常驻，用上面的 bootstrap 脚本。
 
 日常更新（repo 里的热更新路径，不经 release）：
 

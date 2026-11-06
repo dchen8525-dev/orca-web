@@ -20,8 +20,7 @@ log(`orca-web gateway starting`)
 log(describeConfig(config))
 
 let runtime = createRuntime(config)
-runtime.bridge.start()
-runtime.hub.start()
+startRuntime(runtime)
 
 const admin = new LocalAdminServer({
   port: config.adminPort,
@@ -39,13 +38,14 @@ const admin = new LocalAdminServer({
     gatewayId: config.gatewayId,
     configPath: config.configPath,
     pairedVia: config.pairedVia,
-    hubUrl: config.serverUrl,
-    hubKey: config.gatewayKey,
-    hubConnected: runtime.hub.isConnected(),
-    orcaState: runtime.bridge.getState(),
-    orcaDescriptor: runtime.bridge.getDescriptor(),
+    hubUrl: config.serverUrl ?? '',
+    hubKey: config.gatewayKey ?? '',
+    hubConnected: runtime.hub?.isConnected() ?? false,
+    orcaState: runtime.bridge?.getState() ?? 'disconnected',
+    orcaDescriptor: runtime.bridge?.getDescriptor() ?? {},
     configNote: describeConfigSource(config),
-    version: currentVersion()
+    version: currentVersion(),
+    canUpdate: installedExePath() !== null
   }),
   readFile: () => {
     try {
@@ -84,44 +84,57 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     shuttingDown = true
     log(`${signal}: shutting down`)
     admin.stop()
-    runtime.hub.stop()
-    void runtime.bridge.stop().finally(() => process.exit(0))
+    void stopRuntime(runtime).finally(() => process.exit(0))
     // A hung socket must not keep the process alive.
     setTimeout(() => process.exit(0), 3_000).unref()
   })
 }
 
-type Runtime = { bridge: OrcaBridge; hub: HubLink }
+// Both links are optional: a fresh install starts with an empty config and exists only
+// to serve the admin page until the user fills it in.
+type Runtime = { bridge: OrcaBridge | null; hub: HubLink | null }
 
 function createRuntime(next: GatewayConfig): Runtime {
-  const bridge = new OrcaBridge(next.orca)
-  bridge.onEvent((event) => {
+  const bridge = next.orca ? new OrcaBridge(next.orca) : null
+  bridge?.onEvent((event) => {
     if (event.kind === 'state') {
       log(`orca ${event.state}${event.message ? `: ${event.message}` : ''}`)
     }
   })
-  return {
-    bridge,
-    hub: new HubLink({
-      url: next.serverUrl,
-      key: next.gatewayKey,
-      gatewayId: next.gatewayId,
-      bridge,
-      log
-    })
+  const hub =
+    bridge && next.serverUrl && next.gatewayKey
+      ? new HubLink({
+          url: next.serverUrl,
+          key: next.gatewayKey,
+          gatewayId: next.gatewayId,
+          bridge,
+          log
+        })
+      : null
+  return { bridge, hub }
+}
+
+function startRuntime(next: Runtime): void {
+  next.bridge?.start()
+  next.hub?.start()
+  if (!next.hub) {
+    log('hub 未配置：在本机管理页填写服务器地址与 gatewayKey 后会自动重连')
   }
+}
+
+async function stopRuntime(next: Runtime): Promise<void> {
+  next.hub?.stop()
+  await Promise.race([
+    next.bridge?.stop() ?? Promise.resolve(),
+    new Promise((resolve) => setTimeout(resolve, 5_000).unref())
+  ])
 }
 
 async function swapRuntime(next: GatewayConfig): Promise<void> {
   const replacement = createRuntime(next)
-  runtime.hub.stop()
-  await Promise.race([
-    runtime.bridge.stop(),
-    new Promise((resolve) => setTimeout(resolve, 5_000).unref())
-  ])
+  await stopRuntime(runtime)
   runtime = replacement
-  runtime.bridge.start()
-  runtime.hub.start()
+  startRuntime(runtime)
 }
 
 function parseArgs(argv: string[]): { config?: string; localOrca: boolean } {

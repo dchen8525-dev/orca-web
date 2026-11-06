@@ -17,6 +17,8 @@ export type AdminStatus = {
   configNote: string | null
   /** Build version baked in at compile time; null for dev/bundle installs. */
   version: string | null
+  /** Self-update is only wired for an installed release exe, not a hand-downloaded copy. */
+  canUpdate: boolean
 }
 
 export type LocalAdminOptions = {
@@ -420,7 +422,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     setText('version', status.version || '—（bundle/开发版安装，不走本机自助升级）');
     // While a check/update runs, its handlers own the button; render must not stomp it.
     if (updatePhase === 'idle') {
-      document.getElementById('update-btn').hidden = !status.version;
+      document.getElementById('update-btn').hidden = !status.canUpdate;
     }
     var noteRow = document.getElementById('note-row');
     if (status.configNote) { noteRow.hidden = false; setText('config-note', status.configNote); }
@@ -470,7 +472,9 @@ const ADMIN_PAGE_HTML = `<!doctype html>
         if (!payload.ok) { view.textContent = '读失败了：' + (payload.error || 'unknown'); return; }
         view.textContent = payload.raw
           ? '// ' + (payload.configPath || '(config)') + '\\n' + payload.raw
-          : '配置文件不存在（未用 --config 启动，配置只存内存）';
+          : payload.configPath
+            ? '配置文件还不存在；本页第一次保存时会创建。'
+            : '配置文件不存在（未用 --config 启动，配置只存内存）';
       }).catch(function (error) {
         view.textContent = '读失败了：' + String(error);
       });

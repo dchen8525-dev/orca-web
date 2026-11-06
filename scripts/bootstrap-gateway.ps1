@@ -37,7 +37,10 @@ $staged['gateway-loop.cmd'] = (Resolve-Path 'scripts\gateway-loop.cmd').Path
 if (-not (Test-Path (Join-Path $dest 'gateway.json'))) {
   $port = 8790
   $cfg = [ordered]@{ serverUrl = ''; gatewayKey = ''; gatewayId = $env:COMPUTERNAME; admin = @{ port = $port } }
-  $cfg | ConvertTo-Json | Set-Content (Join-Path $dest 'gateway.json') -Encoding UTF8
+  $cfgJson = $cfg | ConvertTo-Json
+  # BOM-less UTF-8 on purpose: Windows PowerShell 5.1's `Set-Content -Encoding UTF8`
+  # prepends a BOM, which JSON.parse in the gateway rejects.
+  [System.IO.File]::WriteAllText((Join-Path $dest 'gateway.json'), $cfgJson, (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "新配置已写入 $dest\gateway.json（已留空：下一步会说明）"
 }
 

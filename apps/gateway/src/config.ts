@@ -1,18 +1,18 @@
 // Gateway configuration: file (ORCA_WEB_CONFIG) + env overrides. The device token is a bearer
 // credential — keep it out of git and out of logs.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { hostname } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { homedir, hostname } from 'node:os'
 import type { OrcaConnectionOptions } from '../../../src/gateway/orca/rpc-client.ts'
 import { readLocalOrcaPairing } from '../../../src/gateway/orca/local-pairing.ts'
 
 export type GatewayConfig = {
-  serverUrl: string
-  gatewayKey: string
+  serverUrl: string | null
+  gatewayKey: string | null
   gatewayId: string
   adminPort: number
   configPath: string | null
-  orca: OrcaConnectionOptions
+  orca: OrcaConnectionOptions | null
   pairedVia: 'config' | 'local-orca'
 }
 
@@ -28,18 +28,49 @@ type FileShape = {
   }
 }
 
+// An unconfigured gateway is a valid state: it runs the loopback admin page so the
+// user can fill in the hub address, key and pairing code. Starting the hub and Orca
+// links is main.ts's call once those values exist.
 export function loadConfig(options: { configPath?: string; localOrca?: boolean }): GatewayConfig {
-  const file = options.configPath ? readJson<FileShape>(options.configPath) : {}
+  const configPath = resolveConfigPath(options.configPath)
+  // A config that does not exist yet is the fresh-install case, not an error: the
+  // gateway starts unconfigured and the admin page creates the file on first save.
+  const file = configPath && existsSync(configPath) ? readJson<FileShape>(configPath) : {}
   return {
-    serverUrl: requireOne(process.env.ORCA_WEB_SERVER_URL ?? file.serverUrl, 'serverUrl'),
-    gatewayKey: requireOne(process.env.ORCA_WEB_GATEWAY_KEY ?? file.gatewayKey, 'gatewayKey'),
-    gatewayId: process.env.ORCA_WEB_GATEWAY_ID ?? file.gatewayId ?? hostname(),
+    serverUrl: text(process.env.ORCA_WEB_SERVER_URL) ?? text(file.serverUrl),
+    gatewayKey: text(process.env.ORCA_WEB_GATEWAY_KEY) ?? text(file.gatewayKey),
+    gatewayId: process.env.ORCA_WEB_GATEWAY_ID ?? text(file.gatewayId) ?? hostname(),
     adminPort:
       readNumber(process.env.ORCA_WEB_ADMIN_PORT) ?? readNumber(file.admin?.port) ?? 8790,
-    configPath: options.configPath ?? null,
+    configPath,
     orca: options.localOrca ? localOrcaOptions() : fileOrcaOptions(file),
     pairedVia: options.localOrca ? 'local-orca' : 'config'
   }
+}
+
+function resolveConfigPath(cliPath?: string): string | null {
+  if (cliPath) {
+    return cliPath
+  }
+  const fromEnv = process.env.ORCA_WEB_CONFIG
+  if (fromEnv) {
+    return fromEnv
+  }
+  // A release exe double-clicked with no arguments: fall back to the file the
+  // bootstrap install uses, so the admin page has somewhere to persist edits.
+  // Node (npm run gateway) keeps the old "no path, nothing persisted" dev behavior.
+  if (process.platform === 'win32' && !isNodeRuntime()) {
+    return join(appDataDir(), 'orca-web', 'gateway.json')
+  }
+  return null
+}
+
+function appDataDir(): string {
+  return process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+}
+
+function isNodeRuntime(): boolean {
+  return /^node(\.exe)?$/i.test(basename(process.execPath))
 }
 
 // The admin page edits the file; env vars already present at startup would shadow it on restart.
@@ -55,9 +86,9 @@ export function describeConfigSource(config: GatewayConfig): string | null {
 
 export function describeConfig(config: GatewayConfig): string {
   return [
-    `server        ${config.serverUrl}`,
+    `server        ${config.serverUrl ?? '(未配置)'}`,
     `gateway id    ${config.gatewayId}`,
-    `orca          ${config.orca.endpoint}`
+    `orca          ${config.orca?.endpoint ?? '(未配对)'}`
   ].join('\n')
 }
 
@@ -75,7 +106,7 @@ export function applyConfigUpdate(
   if (!current.configPath) {
     throw new ConfigError('gateway 没有用 --config 启动，配置无处落盘')
   }
-  const file = readJson<FileShape>(current.configPath)
+  const file = existsSync(current.configPath) ? readJson<FileShape>(current.configPath) : {}
   const next: FileShape = {
     ...file,
     ...(updates.serverUrl === undefined ? {} : { serverUrl: updates.serverUrl }),
@@ -97,15 +128,16 @@ export function applyConfigUpdate(
 
 export class ConfigError extends Error {}
 
-function fileOrcaOptions(file: FileShape): OrcaConnectionOptions {
-  const endpoint = process.env.ORCA_WEB_ORCA_ENDPOINT ?? file.orca?.endpoint
-  const deviceToken = process.env.ORCA_WEB_ORCA_DEVICE_TOKEN ?? file.orca?.deviceToken
-  const hostPublicKeyB64 = process.env.ORCA_WEB_ORCA_HOST_KEY ?? file.orca?.hostPublicKeyB64
-  return {
-    endpoint: requireOne(endpoint, 'orca.endpoint'),
-    deviceToken: requireOne(deviceToken, 'orca.deviceToken'),
-    hostPublicKeyB64: requireOne(hostPublicKeyB64, 'orca.hostPublicKeyB64')
+// Pairing needs all three parts; a partially-filled file (or none at all) just means
+// "not paired yet", which the admin page shows and can fix.
+function fileOrcaOptions(file: FileShape): OrcaConnectionOptions | null {
+  const endpoint = text(process.env.ORCA_WEB_ORCA_ENDPOINT) ?? text(file.orca?.endpoint)
+  const deviceToken = text(process.env.ORCA_WEB_ORCA_DEVICE_TOKEN) ?? text(file.orca?.deviceToken)
+  const hostPublicKeyB64 = text(process.env.ORCA_WEB_ORCA_HOST_KEY) ?? text(file.orca?.hostPublicKeyB64)
+  if (!endpoint || !deviceToken || !hostPublicKeyB64) {
+    return null
   }
+  return { endpoint, deviceToken, hostPublicKeyB64 }
 }
 
 // Dev-only: reuse the pairing material desktop Orca persisted on this machine.
@@ -190,16 +222,17 @@ function readNumber(value: string | number | undefined): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
-function requireOne(value: string | undefined, label: string): string {
-  if (!value) {
-    throw new Error(`Missing ${label}: set it in ORCA_WEB_CONFIG or the environment`)
-  }
-  return value
+function text(value: string | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
 }
 
 function readJson<T>(path: string): T {
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as T
+    // Windows PowerShell 5.1 writes `Set-Content -Encoding UTF8` with a BOM, and the
+    // bootstrap script creates this file that way; JSON.parse rejects it.
+    const raw = readFileSync(path, 'utf8')
+    return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw) as T
   } catch (error) {
     throw new ConfigError(`Could not read config ${path}: ${(error as Error).message}`)
   }
