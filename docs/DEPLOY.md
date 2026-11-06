@@ -63,6 +63,11 @@ Without `-FromRelease` (repo checkout): the script bundles from source
 (`dist-server\orca-gateway.cjs`, needs Node 24 + npm) and installs the same layout with a
 `gateway-loop.cmd` that prefers the exe if present, falling back to node + `.cjs`.
 
+Release-exe installs can skip the script for later versions: the same admin page shows the
+baked build version and offers self-update (it checks the latest release, verifies the
+downloaded exe's sha256, renames the running exe and lets the loop restart it). Bundle/dev
+installs report `501` for that feature and keep the manual path.
+
 The process keeps running via `gateway-loop.cmd` (restarts 10s after an exit) launched hidden
 at logon with no console window — a logon trigger is deliberate: the gateway must run as the
 same user as desktop Orca to reach `127.0.0.1` with its pairing material. It never listens on
