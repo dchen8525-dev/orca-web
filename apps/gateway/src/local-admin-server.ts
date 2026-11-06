@@ -20,6 +20,8 @@ export type AdminStatus = {
 export type LocalAdminOptions = {
   port: number
   status: () => AdminStatus
+  /** Config file as on disk (fresh per read, never cached by the page render). */
+  readFile: () => string | null
   apply: (updates: ConfigUpdates) => Promise<string>
 }
 
@@ -71,6 +73,14 @@ export class LocalAdminServer {
     }
     if (request.method === 'GET' && path === '/api/status') {
       tryJson(response, 200, { ok: true, status: this.options.status() })
+      return
+    }
+    if (request.method === 'GET' && path === '/api/file') {
+      tryJson(response, 200, {
+        ok: true,
+        configPath: this.options.status().configPath,
+        raw: this.options.readFile()
+      })
       return
     }
     if (request.method === 'POST' && path === '/api/config') {
@@ -198,6 +208,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   .form-note { margin: 2px 0 10px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
   .form-note b { color: var(--red); font-weight: 500; }
   .form-actions { display: flex; align-items: center; gap: 10px; }
+  .file-view { margin: 8px 0 0 101px; max-width: 520px; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--rule); border-left: 2px solid var(--rule-strong); padding: 9px 12px; font: 11.5px/1.65 ui-monospace, Menlo, Consolas, monospace; color: #4a453d; background: rgba(28, 26, 23, 0.03); }
   .mono { font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
   .card-state { margin: -2px 0 12px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
   .row { display: flex; align-items: baseline; gap: 9px; padding: 5px 0; font-size: 13.5px; flex-wrap: wrap; }
@@ -254,7 +265,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     </div>
     <div class="row"><span class="label">配对状态</span><span id="pair-dot" class="dot" style="visibility:hidden"></span><span id="pair-state" class="value muted">读状态中…</span></div>
     <div class="row"><span class="label">Orca 连接</span><span class="dot" style="visibility:hidden"></span><span id="orca-value" class="value muted">读状态中…</span></div>
-    <div class="row"><span class="label">配对写入</span><span id="pair-via" class="value muted">—</span></div>
+    <div class="row"><span class="label">配对写入</span><span class="dot" style="visibility:hidden"></span><span id="pair-via" class="value muted">—</span><button id="file-eye" class="ghost-inline" type="button">👁 查看配置</button></div>
+    <pre id="file-view" class="file-view" hidden></pre>
     <div id="pair-form" hidden>
       <p class="form-note">粘贴新配对码 = <b>替换现有配对</b>。旧设备可在桌面 Orca 的设置里撤销；正常在用就不需要重新配对。</p>
       <textarea id="pairing-code" placeholder="orca://pair?code=……（桌面 Orca 设置 → 手机配对 生成，整段粘贴）"></textarea>
@@ -265,9 +277,9 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   </section>
 
   <section class="card">
-    <div class="row"><span class="label">网关 id</span><span id="gateway-id" class="value muted"></span></div>
-    <div class="row"><span class="label">配置文件</span><span id="config-path" class="value muted"></span></div>
-    <div class="row" id="note-row" hidden><span class="label">补充</span><span id="config-note" class="value" style="color:#b07d24"></span></div>
+    <div class="row"><span class="label">网关 id</span><span class="dot" style="visibility:hidden"></span><span id="gateway-id" class="value muted"></span></div>
+    <div class="row"><span class="label">配置文件</span><span class="dot" style="visibility:hidden"></span><span id="config-path" class="value muted"></span></div>
+    <div class="row" id="note-row" hidden><span class="label">补充</span><span class="dot" style="visibility:hidden"></span><span id="config-note" class="value" style="color:#b07d24"></span></div>
   </section>
 
   <p class="hint">
@@ -393,6 +405,25 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   document.getElementById('key-eye').addEventListener('click', function () {
     keyShown = !keyShown;
     refresh();
+  });
+  document.getElementById('file-eye').addEventListener('click', function () {
+    var view = document.getElementById('file-view');
+    if (view.hidden) {
+      view.textContent = '读配置文件…';
+      view.hidden = false;
+      this.textContent = '🙈 收起配置';
+      fetch('/api/file').then(function (r) { return r.json(); }).then(function (payload) {
+        if (!payload.ok) { view.textContent = '读失败了：' + (payload.error || 'unknown'); return; }
+        view.textContent = payload.raw
+          ? '// ' + (payload.configPath || '(config)') + '\n' + payload.raw
+          : '配置文件不存在（未用 --config 启动，配置只存内存）';
+      }).catch(function (error) {
+        view.textContent = '读失败了：' + String(error);
+      });
+    } else {
+      view.hidden = true;
+      this.textContent = '👁 查看配置';
+    }
   });
   function toggleForm(showId, editBtnId) {
     document.getElementById(showId).hidden = !document.getElementById(showId).hidden;

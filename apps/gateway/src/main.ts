@@ -1,5 +1,6 @@
 // Entry point: gateway runs beside desktop Orca on the home machine and dials the VPS hub.
 // A loopback admin page lets the user re-pair or move hubs without editing files by hand.
+import { existsSync, readFileSync } from 'node:fs'
 import {
   applyConfigUpdate,
   describeConfig,
@@ -34,6 +35,16 @@ const admin = new LocalAdminServer({
     orcaDescriptor: runtime.bridge.getDescriptor(),
     configNote: describeConfigSource(config)
   }),
+  readFile: () => {
+    try {
+      if (!config.configPath || !existsSync(config.configPath)) {
+        return null
+      }
+      return readFileSync(config.configPath, 'utf8')
+    } catch {
+      return null
+    }
+  },
   // Validation errors must not kill the process; a swap failure is a broken state, so the
   // process exits and the restart loop brings it up on the already-persisted config.
   apply: async (updates) => {
