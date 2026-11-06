@@ -312,19 +312,19 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     var verdict = document.getElementById('verdict');
     if (hub && orcaLive) {
       setDot('verdict-dot', 'on');
-      verdict.textContent = '一切正常：两组连接都健康，不需要动下面的任何设置。';
+      verdict.textContent = '一切正常：hub 连通，Orca 配对在用。以下设置无需改动。';
       verdict.style.color = 'var(--green)';
     } else if (hub && !orcaLive) {
       setDot('verdict-dot', 'warn');
-      verdict.textContent = 'hub 正常，但 Orca 没连上：先确认桌面 Orca 开着；仍不行再用下面的重新配对。';
+      verdict.textContent = 'hub 已连通；桌面 Orca 未连接。先确认 Orca 在运行，仍无果再重新配对。';
       verdict.style.color = '#b07d24';
     } else if (!hub && orcaLive) {
       setDot('verdict-dot', 'warn');
-      verdict.textContent = 'Orca 是通的，但 hub 连不上：检查服务器本身；要换 hub 服务器时用下面的修改入口。';
+      verdict.textContent = '桌面 Orca 在线；hub 未连通。先检查 VPS 是否在运行，换 hub 时用下方的修改入口。';
       verdict.style.color = '#b07d24';
     } else {
       setDot('verdict-dot', 'off');
-      verdict.textContent = 'hub 和 Orca 都没连上。刚装机属正常：先修改 hub 地址与 key，再重新配对。';
+      verdict.textContent = '两组连接均未建立。初次安装属此情形：先填写 hub 地址与 key，再完成配对。';
       verdict.style.color = 'var(--red)';
     }
 
