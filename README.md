@@ -222,40 +222,54 @@ npm run gateway
 
 ## 部署
 
-两台机器、两个进程；凭据和主机名不进仓库，一次性初始化见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
-日常更新只跑两行：
+两台机器两个进程；凭据和主机名不进仓库。运行时都是**单个打包文件**（esbuild 内联 `ws` 等所有依赖），
+机器上只要有 Node 24，不需要 npm install、不需要源码。
+
+从零安装（各一条命令）：
+
+```bash
+# VPS：一个单元搞定 bundle + 静态页 + systemd + 配置 + Caddy，密码和 gateway key 只打印一次
+bash scripts/bootstrap-server.sh orca-web <你的域名>
+
+# 家里（repo 里运行一次；需要 Node 24）
+powershell scripts\bootstrap-gateway.ps1   # 装到 %APPDATA%\orca-web，接管自启，打开管理页
+```
+
+家里唯一的"手工"步骤：在 `http://127.0.0.1:8790` 的本机管理页把 bootstrap-server 打印的
+gatewayKey 贴进去，再粘贴桌面 Orca 生成的 `orca://pair?code=…` 配对码。
+
+日常更新：
 
 ```bash
 bash scripts/deploy-web.sh      # 前端改动后：tc + build + scp + 原子换 dist + 校验 hash
-bash scripts/deploy-server.sh   # 改了 apps/server、apps/gateway、src/shared 后：tc + scp 源码 + 重启服务 + health
+bash scripts/deploy-server.sh   # 改了 apps/server、apps/gateway、src/shared 后：tc + bundle + 重启服务 + health
 ```
 
 两个脚本都走 ssh 别名 `orca-web`（定义在运维机的 `~/.ssh/config`，`ORCA_WEB_SSH` 环境变量可覆盖）。
-`npm run tc`（server/gateway/scripts 的 strict typecheck + 前端 typecheck）与 TypeScript/CI
+`npm run tc`（server/gateway/scripts 的 strict typecheck + 前端 typecheck）与 CI
 （`.github/workflows/ci.yml`）是同一道闸，部署脚本会再跑一遍，不要绕过。
 
 要点：
 
-- **服务端没有构建产物**：VPS 上的 Node 24 直接跑 `apps/server/src/main.ts`（TS 类型剥除），
-  所以"部署服务端"就是把源码同步过去并 `systemctl restart orca-web.service`。
-- **静态目录是 `/opt/orca-web/apps/web/dist`**：`deploy-web.sh` 换上去前把旧目录留在原地
-  `dist.bak-<时间戳>`，回滚就是 `mv` 回来；`deploy-server.sh` 会先打 `src-backup-<时间戳>.tgz`。
-- **验证**：部署完看 `https://<域名>/api/health`（要 `"gateway":{"connected":true,…}`）；
+- **服务端产物**：VPS 跑 `/opt/orca-web/dist-server/orca-server.cjs`（配置 `/etc/orca-web/server.json`，
+  静态目录 `/opt/orca-web/apps/web/dist`）；部署前旧文件会留成 `dist.bak-*` / `src-backup-*.tgz`，
+  回滚就是把备份 `mv` 回来。
+- **验证**：`https://<域名>/api/health` 要 `"gateway":{"connected":true,…}`；
   `deploy-web.sh` 结尾会确认线上 assets 里有刚构建的 `index-*.css/js` 哈希，缺了即报错退出。
 - **看日志**：VPS `journalctl -u orca-web.service -f`；前端是纯静态文件，无日志。
 
 ### 家里 gateway 的常驻（Windows，本机现状）
 
-1. 配置在 `%APPDATA%\orca-web\gateway.json`：hub 地址（`wss://…/gateway`）、gatewayKey、
-   Orca 配对材料（`deviceToken` / `hostPublicKeyB64`）。`0600` 之外别放松——里面是 bearer 凭据。
-2. `scripts\gateway-loop.cmd`：无限循环 `node apps\gateway\src\main.ts --config
-   %APPDATA%\orca-web\gateway.json`，进程退出后 10 秒重启，日志落在仓库的 `logs\gateway.log`。
-3. `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\orca-web-gateway.vbs`
-   （模板是 `scripts\gateway-autostart.vbs`）：登录时无窗口拉起上面的 loop。
-4. **用登录触发是刻意的**：gateway 必须和桌面 Orca 同用户，才读得到配对材料、连得上
+1. 一切都在 `%APPDATA%\orca-web\`：`orca-gateway.cjs`（bundle）、`gateway.json`（hub 地址、
+   gatewayKey、Orca 配对材料——bearer 凭据，权限收紧）、`gateway-loop.cmd`、`gateway.log`。
+2. `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\orca-web-gateway.vbs`：
+   登录时无窗口拉起 loop（模板 `scripts\gateway-autostart.vbs`），进程退出 10 秒重启。
+3. **用登录触发是刻意的**：gateway 必须和桌面 Orca 同用户，才读得到配对材料、连得上
    `127.0.0.1` 的 Orca 端点——服务/计划任务以其他身份跑反而拿不到凭据。
+4. 升级/重装 gateway：重跑一遍 `powershell scripts\bootstrap-gateway.ps1`，它会停掉旧进程
+   与旧自启循环、装新 bundle；**不会动** `gateway.json`。
 
-排查顺序：`logs\gateway.log`（家里）→ `journalctl -u orca-web.service`（VPS）→
+排查顺序：`%APPDATA%\orca-web\gateway.log`（家里）→ `journalctl -u orca-web.service`（VPS）→
 浏览器登录页的连接状态条。改 hub 地址、gatewayKey 或换配对码不用碰文件，开
 `http://127.0.0.1:8790`（gateway 的本机管理页，端口 `ORCA_WEB_ADMIN_PORT` 可换）。
 其余步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。

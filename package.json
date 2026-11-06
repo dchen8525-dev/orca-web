@@ -19,7 +19,9 @@
     "web:build": "vite build apps/web",
     "web:typecheck": "tsc -p apps/web/tsconfig.json",
     "tc:server": "tsc -p tsconfig.check.json",
-    "tc": "npm run tc:server && npm run web:typecheck"
+    "tc": "npm run tc:server && npm run web:typecheck",
+    "bundle": "esbuild apps/server/src/main.ts --bundle --platform=node --format=cjs --outfile=dist-server/orca-server.cjs && esbuild apps/gateway/src/main.ts --bundle --platform=node --format=cjs --outfile=dist-server/orca-gateway.cjs",
+    "release": "npm run bundle && npm run web:build"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -33,6 +35,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.2.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   }

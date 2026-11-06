@@ -2,10 +2,14 @@
 
 Two processes on two machines, one shared secret.
 
-The scripted path: `scripts/deploy-web.sh` (typecheck + build + swap + verify) and
-`scripts/deploy-server.sh` (typecheck + sync sources + restart). Both target the ssh host
-alias `orca-web` by default — override with `ORCA_WEB_SSH`. Keep hostnames out of this repo;
-the ssh alias lives in the operator's `~/.ssh/config`.
+The scripted path: `scripts/bootstrap-server.sh <alias> <domain>` (one-shot VPS init:
+bundle + web dist + systemd + config + Caddy; keeps an existing config), then
+`scripts/bootstrap-gateway.ps1` at home (installs the gateway bundle into
+`%APPDATA%\orca-web` and wires autostart; pairing happens on the gateway's local admin
+page). Day-to-day updates: `scripts/deploy-web.sh` (typecheck + build + swap + verify) and
+`scripts/deploy-server.sh` (typecheck + bundle + restart). All target the ssh host alias
+`orca-web` by default — override with `ORCA_WEB_SSH`. Keep hostnames out of this repo; the
+ssh alias lives in the operator's `~/.ssh/config`.
 
 ## VPS
 

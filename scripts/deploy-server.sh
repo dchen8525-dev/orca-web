@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-# Deploy server + gateway sources to the hub VPS and restart the service.
-# The node-24 runtime strips types, so tsconfig.check.json is the gate, not a build step.
+# Deploy the hub server as a single bundled file: typecheck, bundle, upload, restart.
+# The no-install layout: the VPS runs /opt/orca-web/dist-server/orca-server.cjs;
+# only node (>=24), the config and the static dir are needed — not node_modules.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TARGET="${ORCA_WEB_SSH:-orca-web}"
 
-npm run tc:server
+npm run tc
+npm run bundle
 
-BACKUP="/opt/orca-web/src-backup-$(date +%Y%m%d%H%M%S).tgz"
-ssh "$TARGET" "tar -czf '$BACKUP' apps/server/src apps/gateway/src src/shared 2>/dev/null; echo backup: '$BACKUP'"
+ssh "$TARGET" 'mkdir -p /opt/orca-web/dist-server'
+scp -q dist-server/orca-server.cjs "$TARGET":/opt/orca-web/dist-server/
 
-scp -q -r apps/server/src "$TARGET":/opt/orca-web/apps/server/
-scp -q -r apps/gateway/src "$TARGET":/opt/orca-web/apps/gateway/
-scp -q -r src/shared "$TARGET":/opt/orca-web/src/
-
+# Upgrade path: units pointing at the old source layout keep a stale ExecStart.
 ssh "$TARGET" '
+  set -e
+  UNIT=/etc/systemd/system/orca-web.service
+  if grep -q "apps/server/src/main.ts" "$UNIT"; then
+    sed -i "s|ExecStart=.*|ExecStart=/usr/bin/env node /opt/orca-web/dist-server/orca-server.cjs|" "$UNIT"
+    systemctl daemon-reload
+    echo "unit moved to bundle layout"
+  fi
   systemctl restart orca-web.service
   sleep 1
   systemctl is-active orca-web.service
