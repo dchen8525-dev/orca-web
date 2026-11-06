@@ -415,7 +415,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       fetch('/api/file').then(function (r) { return r.json(); }).then(function (payload) {
         if (!payload.ok) { view.textContent = '读失败了：' + (payload.error || 'unknown'); return; }
         view.textContent = payload.raw
-          ? '// ' + (payload.configPath || '(config)') + '\n' + payload.raw
+          ? '// ' + (payload.configPath || '(config)') + '\\n' + payload.raw
           : '配置文件不存在（未用 --config 启动，配置只存内存）';
       }).catch(function (error) {
         view.textContent = '读失败了：' + String(error);
