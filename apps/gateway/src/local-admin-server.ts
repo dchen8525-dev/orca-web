@@ -185,6 +185,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   h1 { margin: 8px 0 6px; font: 400 30px/1.2 Georgia, 'Songti SC', serif; }
   .dek { margin: 0 0 26px; color: var(--muted); font-size: 13.5px; }
   .card { border: 1px solid var(--rule-strong); background: #fffdf9; padding: 16px 18px; margin-bottom: 18px; }
+  .mono { font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .card-state { margin: -2px 0 12px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
   .row { display: flex; align-items: baseline; gap: 9px; padding: 5px 0; font-size: 13.5px; flex-wrap: wrap; }
   .row .label { flex: none; width: 92px; color: var(--muted); }
   .row .value { min-width: 0; overflow-wrap: anywhere; }
@@ -210,9 +212,15 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   <h1>网关管理</h1>
   <p class="dek">这台电脑上的 gateway 如何连 hub、如何连桌面 Orca —— 都在这一页改，不需要再动文件。</p>
 
+  <section class="card" id="verdict-card">
+    <div class="row"><span id="verdict-dot" class="dot"></span><span id="verdict" class="value" style="font-weight:500">读状态中…</span></div>
+  </section>
+
   <section class="card">
     <div class="row"><span class="label">hub</span><span id="hub-dot" class="dot"></span><span id="hub-value" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">hub 地址</span><span id="hub-url" class="value mono">—</span></div>
     <div class="row"><span class="label">orca</span><span id="orca-dot" class="dot"></span><span id="orca-value" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">配对状态</span><span id="pair-state" class="value muted">读状态中…</span></div>
     <div class="row"><span class="label">网关 id</span><span id="gateway-id" class="value muted"></span></div>
     <div class="row"><span class="label">配置文件</span><span id="config-path" class="value muted"></span></div>
     <div class="row" id="note-row" hidden><span class="label">提示</span><span id="config-note" class="value" style="color:#b07d24"></span></div>
@@ -220,7 +228,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
   <section class="card">
     <p class="field-label">hub 地址与 gateway key</p>
-    <input id="server-url" placeholder="wss://你的服务器/gateway" autocomplete="off" />
+    <p class="card-state" id="hub-state">当前连接状态会出现在这里。</p>
+    <input id="server-url" placeholder="wss://你的服务器/gateway（要换服务器才填）" autocomplete="off" />
     <input id="gateway-key" type="password" placeholder="gateway key（已保存过，留空表示不改）" autocomplete="new-password" />
     <button id="save-hub">保存并重连</button>
     <p id="hub-note" class="note"></p>
@@ -228,32 +237,73 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
   <section class="card">
     <p class="field-label">桌面 Orca 配对码</p>
+    <p class="card-state" id="pair-card-state">配对状态会出现在这里。</p>
     <textarea id="pairing-code" placeholder="orca://pair?code=……（桌面 Orca 设置里生成，直接整段粘贴）"></textarea>
-    <button id="apply-pairing">完成配对</button>
+    <button id="apply-pairing">重新配对（替换现有配对）</button>
     <p id="pair-note" class="note"></p>
   </section>
 
   <p class="hint">
     <b>改完 hub 地址 / key：</b>网关立刻断开旧连接、用新配置拨号，状态几秒内刷新。<br />
-    <b>换配对：</b>在桌面 Orca 的 设置 → 手机配对 生成码，粘贴到这里即可；码就是凭据，不要发给不信任的渠道，用完可让 Orca 撤销旧设备。<br />
+    <b>换配对：</b>在桌面 Orca 的 设置 → 手机配对 生成码，粘贴到这里即可；重新配对会替换现有配对，旧的设备可在桌面 Orca 里撤销。<br />
     <b>本页只绑 127.0.0.1：</b>别的机器连不进来；配对信息也不经过 VPS。
   </p>
 </main>
 <script>
   function setText(id, text) { document.getElementById(id).textContent = text; }
+  function setDot(id, state) { document.getElementById(id).className = 'dot ' + state; }
   function render(status) {
     var hub = status.hubConnected;
-    var hubDot = document.getElementById('hub-dot');
-    hubDot.className = 'dot ' + (hub ? 'on' : 'off');
-    setText('hub-value', hub ? '已连接' : '重试中…');
     var orca = status.orcaState;
-    var orcaDot = document.getElementById('orca-dot');
-    orcaDot.className = 'dot ' + (orca === 'connected' ? 'on' : orca === 'disconnected' ? 'off' : 'warn');
     var desc = status.orcaDescriptor || {};
+    var orcaLive = orca === 'connected';
+    var hubText = hub ? '已连接' : '重试中…';
+
+    // verdict: "do I need to touch anything?" at a glance
+    var verdictDot = document.getElementById('verdict-dot');
+    var verdict = document.getElementById('verdict');
+    if (hub && orcaLive) {
+      setDot('verdict-dot', 'on');
+      verdict.textContent = '一切正常：hub 已连通、Orca 已配对在用。不需要动下面的任何设置。';
+      verdict.style.color = 'var(--green)';
+    } else if (hub && !orcaLive) {
+      setDot('verdict-dot', 'warn');
+      verdict.textContent = 'hub 正常，但 Orca 没连上：先确认桌面 Orca 开着；不行再重新配对（用下一张卡）。';
+      verdict.style.color = '#b07d24';
+    } else if (!hub && orcaLive) {
+      setDot('verdict-dot', 'warn');
+      verdict.textContent = '和 Orca 是通的，但 hub 连不上：检查 hub 地址 / key（下一张卡），或 VPS 是否停机。';
+      verdict.style.color = '#b07d24';
+    } else {
+      setDot('verdict-dot', 'off');
+      verdict.textContent = 'hub 和 Orca 都没连上。刚装机属正常：先填 hub 地址与 key，再粘贴配对码。';
+      verdict.style.color = 'var(--red)';
+    }
+
+    setDot('hub-dot', hub ? 'on' : 'off');
+    setText('hub-value', hubText);
+    setText('hub-url', status.hubUrl || '—');
+    setText('hub-state', hub
+      ? ('现在和 ' + (status.hubUrl || '—') + ' 是通的。这组字段不动它就没事；只有换服务器时才需要填。')
+      : '现在没连上（已在后台自动重拨）。把它连上需要 hub 地址和 gatewayKey，两样都必须填。');
+
+    setDot('orca-dot', orcaLive ? 'on' : orca === 'disconnected' ? 'off' : 'warn');
     var orcaText = orca;
     if (desc.appVersion) orcaText += ' · Orca ' + desc.appVersion;
     if (desc.machineName) orcaText += ' · ' + desc.machineName;
     setText('orca-value', orcaText);
+
+    var orcaNamed = desc.appVersion || desc.machineName;
+    var pairValue = orcaLive
+      ? ('已配对并在用' + (orcaNamed ? '（' + orcaNamed + '）' : ''))
+      : orca === 'disconnected' && orcaNamed
+        ? '已配对，但此刻不在线'
+        : (status.pairedVia === 'local-orca' ? '已本地配对' : '读状态中…');
+    setText('pair-state', pairValue);
+    setText('pair-card-state', orcaLive
+      ? '已和桌面 Orca 配对且正常使用中。粘贴新配对码会替换现有配对——旧设备可在桌面 Orca 里撤销，正常情况不需要操作。'
+      : '还没和 Orca 走起来。到桌面 Orca 的 设置 → 手机配对 生成一条配对码，整段粘贴到框里即可。');
+
     setText('gateway-id', status.gatewayId);
     setText('config-path', status.configPath || '（未用 --config，配置无处落盘）');
     var noteRow = document.getElementById('note-row');
