@@ -289,7 +289,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     var orca = status.orcaState;
     var desc = status.orcaDescriptor || {};
     var orcaLive = orca === 'connected';
-    var orcaNamed = desc.appVersion || desc.machineName;
 
     // verdict: "do I need to touch anything?" at a glance
     var verdictDot = document.getElementById('verdict-dot');
@@ -322,29 +321,26 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     setText('key-eye', keyShown ? '🙈 隐藏' : '👁 显示');
 
     // group: gateway ↔ orca
+    var version = desc.appVersion ? 'Orca ' + desc.appVersion : null;
+    var machine = desc.machineName || null;
+    var orcaIdent = [version, machine].filter(Boolean).join(' · ');
     var pairedText;
-    var chipState = 'chip-off';
-    var chipText;
     if (orcaLive) {
-      chipState = 'chip-on';
-      chipText = '在用中';
-      pairedText = '已配对，运行中' + (orcaNamed ? '（' + orcaNamed + '）' : '');
-    } else if (orca === 'disconnected' && orcaNamed) {
-      chipState = 'chip-warn';
-      chipText = '今天不在线';
-      pairedText = '已配对，但此刻不在线：查桌面 Orca 是否开着';
+      setChip('orca-chip', '在线', 'chip-on');
+      pairedText = machine ? '已配对，正在和 ' + machine + ' 上的 Orca 通信' : '已配对，正在通信';
+    } else if (orcaIdent) {
+      setChip('orca-chip', '离线', 'chip-warn');
+      pairedText = '已配对，但 Orca 现在没连上——桌面 Orca 开机/打开了吗？';
     } else if (status.pairedVia === 'local-orca') {
-      chipState = 'chip-warn';
-      chipText = '本地材料';
-      pairedText = '本轮用桌面 Orca 的本地配对材料读取';
+      setChip('orca-chip', '等待', 'chip-warn');
+      pairedText = '本轮用桌面 Orca 的本地配对材料读取，还未走通连接';
     } else {
-      chipText = '未配对';
+      setChip('orca-chip', '未配对', 'chip-off');
       pairedText = '还没有配对材料';
     }
-    setChip('orca-chip', chipText, chipState);
-    setDot('orca-dot', orcaLive ? 'on' : orca === 'disconnected' ? 'off' : 'warn');
+    setDot('orca-dot', orcaLive ? 'on' : orcaIdent ? 'off' : 'warn');
     setText('pair-state', pairedText);
-    setText('orca-value', orca === 'disconnected' && !orcaNamed ? '—' : (orca ?? '—'));
+    setText('orca-value', orcaIdent || '还没有读到 Orca 的信息');
     setText('pair-via', status.pairedVia === 'local-orca' ? '本地配对材料' : '配置文件（gateway.json）');
 
     setText('gateway-id', status.gatewayId);
