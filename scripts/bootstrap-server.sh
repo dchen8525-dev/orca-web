@@ -100,13 +100,13 @@ apt-get update -qq >/dev/null 2>&1 || true
 apt-get install -y -qq curl >/dev/null 2>&1 || true
 mkdir -p /etc/orca-web
 echo "\$DOMAIN" > /etc/orca-web/domain.txt
-curl -fsSL -o /tmp/orca-server.deb "\$DEB_URL"
-sha_url="\${DEB_URL}.sha256"
-if curl -fsSL -o /tmp/orca-server.deb.sha256 "\$sha_url"; then
-  ( cd /tmp && sha256sum -c orca-server.deb.sha256 )
+asset_name="\${DEB_URL##*/}"
+curl -fsSL -o "/tmp/\$asset_name" "\$DEB_URL"
+if curl -fsSL -o "/tmp/\$asset_name.sha256" "\$DEB_URL.sha256"; then
+  ( cd /tmp && sha256sum -c "\$asset_name.sha256" )
 fi
-dpkg -i /tmp/orca-server.deb
-rm -f /tmp/orca-server.deb /tmp/orca-server.deb.sha256 /etc/orca-web/domain.txt
+dpkg -i "/tmp/\$asset_name"
+rm -f "/tmp/\$asset_name" "/tmp/\$asset_name.sha256" /etc/orca-web/domain.txt
 DEBPULL
 fi
 
