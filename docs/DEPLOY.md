@@ -2,6 +2,11 @@
 
 Two processes on two machines, one shared secret.
 
+The scripted path: `scripts/deploy-web.sh` (typecheck + build + swap + verify) and
+`scripts/deploy-server.sh` (typecheck + sync sources + restart). Both target the ssh host
+alias `orca-web` by default — override with `ORCA_WEB_SSH`. Keep hostnames out of this repo;
+the ssh alias lives in the operator's `~/.ssh/config`.
+
 ## VPS
 
 1. `node scripts/hash-password.ts` → put the hash in `apps/server/config.json`

@@ -101,17 +101,17 @@ export class LocalAdminServer {
 
     const updates: ConfigUpdates = {}
     try {
-      if (asText(input.serverUrl) !== null) {
-        updates.serverUrl = normalizeHubUrl(asText(input.serverUrl).value)
+      const serverUrl = asText(input.serverUrl)
+      if (serverUrl) {
+        updates.serverUrl = normalizeHubUrl(serverUrl.value)
       }
-      if (asText(input.gatewayKey) !== null) {
-        const key = asText(input.gatewayKey).value
-        if (key) {
-          updates.gatewayKey = key
-        }
+      const gatewayKey = asText(input.gatewayKey)
+      if (gatewayKey?.value) {
+        updates.gatewayKey = gatewayKey.value
       }
-      if (asText(input.pairingCode) !== null && asText(input.pairingCode).value) {
-        const offer = decodePairingCode(asText(input.pairingCode).value)
+      const pairingCode = asText(input.pairingCode)
+      if (pairingCode?.value) {
+        const offer = decodePairingCode(pairingCode.value)
         updates.orca = {
           endpoint: loopbackEndpoint(offer.endpoint),
           deviceToken: offer.deviceToken,

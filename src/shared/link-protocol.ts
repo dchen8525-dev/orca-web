@@ -42,6 +42,7 @@ export type HubFrame =
   | { type: 'subscribe'; id: string; method: string; params?: unknown }
   | { type: 'unsubscribe'; id: string }
   | { type: 'ping' }
+  | { type: 'pong' }
   | { type: 'reject'; code: string; message: string }
 
 export function isHubFrame(value: unknown): value is HubFrame {
