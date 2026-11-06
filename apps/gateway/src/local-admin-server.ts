@@ -9,6 +9,8 @@ export type AdminStatus = {
   configPath: string | null
   pairedVia: string
   hubUrl: string
+  /** The gateway must hold its hub credential in memory anyway; the page is loopback-only. */
+  hubKey: string
   hubConnected: boolean
   orcaState: string
   orcaDescriptor: Record<string, unknown>
@@ -185,6 +187,17 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   h1 { margin: 8px 0 6px; font: 400 30px/1.2 Georgia, 'Songti SC', serif; }
   .dek { margin: 0 0 26px; color: var(--muted); font-size: 13.5px; }
   .card { border: 1px solid var(--rule-strong); background: #fffdf9; padding: 16px 18px; margin-bottom: 18px; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .card-sub { text-transform: none; letter-spacing: 0.04em; color: var(--faint); font-weight: 400; }
+  .chip { flex: none; font: 500 10px/1 sans-serif; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 9px; border: 1px solid var(--rule-strong); color: var(--muted); }
+  .chip-on { color: var(--green); border-color: rgba(63, 107, 82, 0.4); background: rgba(63, 107, 82, 0.06); }
+  .chip-off { color: var(--red); border-color: rgba(143, 47, 34, 0.35); background: rgba(143, 47, 34, 0.05); }
+  .chip-warn { color: #b07d24; border-color: rgba(176, 125, 36, 0.45); background: rgba(176, 125, 36, 0.08); }
+  .ghost-inline { background: none; color: var(--muted); border: 1px solid var(--rule); padding: 4px 9px; font: 500 10.5px/1.4 sans-serif; letter-spacing: 0.06em; cursor: pointer; text-transform: none; }
+  .ghost-inline:hover { color: var(--ink); border-color: var(--rule-strong); }
+  .form-note { margin: 2px 0 10px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .form-note b { color: var(--red); font-weight: 500; }
+  .form-actions { display: flex; align-items: center; gap: 10px; }
   .mono { font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
   .card-state { margin: -2px 0 12px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
   .row { display: flex; align-items: baseline; gap: 9px; padding: 5px 0; font-size: 13.5px; flex-wrap: wrap; }
@@ -216,93 +229,123 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     <div class="row"><span id="verdict-dot" class="dot"></span><span id="verdict" class="value" style="font-weight:500">读状态中…</span></div>
   </section>
 
-  <section class="card">
-    <div class="row"><span class="label">hub</span><span id="hub-dot" class="dot"></span><span id="hub-value" class="value muted">读状态中…</span></div>
-    <div class="row"><span class="label">hub 地址</span><span id="hub-url" class="value mono">—</span></div>
-    <div class="row"><span class="label">orca</span><span id="orca-dot" class="dot"></span><span id="orca-value" class="value muted">读状态中…</span></div>
+  <section class="card" id="card-hub">
+    <div class="card-head">
+      <p class="field-label" style="margin:0">hub 连接 <span class="card-sub">gateway ↔ 远端服务器</span></p>
+      <span class="chip" id="hub-chip">读状态中…</span>
+    </div>
+    <div class="row"><span class="label">状态</span><span id="hub-dot" class="dot"></span><span id="hub-value" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">服务器</span><span id="hub-url" class="value mono">—</span></div>
+    <div class="row"><span class="label">gateway key</span><span id="hub-key" class="value mono">••••••••••</span><button id="key-eye" class="ghost-inline" type="button">👁 显示</button></div>
+    <div id="hub-form" hidden>
+      <p class="form-note">换服务器或换 key。地址 + key 两样都填才会全部替换；只填一个就只改一个。保存后立刻重拨。</p>
+      <input id="server-url" placeholder="wss://服务器域名/gateway" autocomplete="off" />
+      <input id="gateway-key" type="password" placeholder="gateway key（新 key）" autocomplete="new-password" />
+      <div class="form-actions"><button id="save-hub">保存并重连</button><button id="hub-cancel" class="ghost-inline" type="button">取消</button></div>
+      <p id="hub-note" class="note"></p>
+    </div>
+    <button id="hub-edit" class="ghost-inline" type="button">修改地址 / key…</button>
+  </section>
+
+  <section class="card" id="card-orca">
+    <div class="card-head">
+      <p class="field-label" style="margin:0">桌面 Orca 配对 <span class="card-sub">gateway ↔ 这台电脑的 Orca</span></p>
+      <span class="chip" id="orca-chip">读状态中…</span>
+    </div>
     <div class="row"><span class="label">配对状态</span><span id="pair-state" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">Orca 信息</span><span id="orca-value" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">配对写入</span><span id="pair-via" class="value muted">—</span></div>
+    <div id="pair-form" hidden>
+      <p class="form-note">粘贴新配对码 = <b>替换现有配对</b>。旧设备可在桌面 Orca 的设置里撤销；正常在用就不需要重新配对。</p>
+      <textarea id="pairing-code" placeholder="orca://pair?code=……（桌面 Orca 设置 → 手机配对 生成，整段粘贴）"></textarea>
+      <div class="form-actions"><button id="apply-pairing">完成配对</button><button id="pair-cancel" class="ghost-inline" type="button">取消</button></div>
+      <p id="pair-note" class="note"></p>
+    </div>
+    <button id="pair-edit" class="ghost-inline" type="button">重新配对…</button>
+  </section>
+
+  <section class="card">
     <div class="row"><span class="label">网关 id</span><span id="gateway-id" class="value muted"></span></div>
     <div class="row"><span class="label">配置文件</span><span id="config-path" class="value muted"></span></div>
-    <div class="row" id="note-row" hidden><span class="label">提示</span><span id="config-note" class="value" style="color:#b07d24"></span></div>
-  </section>
-
-  <section class="card">
-    <p class="field-label">hub 地址与 gateway key</p>
-    <p class="card-state" id="hub-state">当前连接状态会出现在这里。</p>
-    <input id="server-url" placeholder="wss://你的服务器/gateway（要换服务器才填）" autocomplete="off" />
-    <input id="gateway-key" type="password" placeholder="gateway key（已保存过，留空表示不改）" autocomplete="new-password" />
-    <button id="save-hub">保存并重连</button>
-    <p id="hub-note" class="note"></p>
-  </section>
-
-  <section class="card">
-    <p class="field-label">桌面 Orca 配对码</p>
-    <p class="card-state" id="pair-card-state">配对状态会出现在这里。</p>
-    <textarea id="pairing-code" placeholder="orca://pair?code=……（桌面 Orca 设置里生成，直接整段粘贴）"></textarea>
-    <button id="apply-pairing">重新配对（替换现有配对）</button>
-    <p id="pair-note" class="note"></p>
+    <div class="row" id="note-row" hidden><span class="label">补充</span><span id="config-note" class="value" style="color:#b07d24"></span></div>
   </section>
 
   <p class="hint">
-    <b>改完 hub 地址 / key：</b>网关立刻断开旧连接、用新配置拨号，状态几秒内刷新。<br />
-    <b>换配对：</b>在桌面 Orca 的 设置 → 手机配对 生成码，粘贴到这里即可；重新配对会替换现有配对，旧的设备可在桌面 Orca 里撤销。<br />
-    <b>本页只绑 127.0.0.1：</b>别的机器连不进来；配对信息也不经过 VPS。
+    <b>状态自动刷新</b>：每 3 秒重读一次，改完几秒内就能看到新状态。<br />
+    <b>本页只绑 127.0.0.1：</b>别的机器连不进来；key 和配对信息不离开这台电脑、不经过 VPS。
   </p>
 </main>
 <script>
+  var keyShown = false;
   function setText(id, text) { document.getElementById(id).textContent = text; }
   function setDot(id, state) { document.getElementById(id).className = 'dot ' + state; }
+  function setChip(id, text, state) {
+    var el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'chip ' + state;
+  }
   function render(status) {
     var hub = status.hubConnected;
     var orca = status.orcaState;
     var desc = status.orcaDescriptor || {};
     var orcaLive = orca === 'connected';
-    var hubText = hub ? '已连接' : '重试中…';
+    var orcaNamed = desc.appVersion || desc.machineName;
 
     // verdict: "do I need to touch anything?" at a glance
     var verdictDot = document.getElementById('verdict-dot');
     var verdict = document.getElementById('verdict');
     if (hub && orcaLive) {
       setDot('verdict-dot', 'on');
-      verdict.textContent = '一切正常：hub 已连通、Orca 已配对在用。不需要动下面的任何设置。';
+      verdict.textContent = '一切正常：两组连接都健康，不需要动下面的任何设置。';
       verdict.style.color = 'var(--green)';
     } else if (hub && !orcaLive) {
       setDot('verdict-dot', 'warn');
-      verdict.textContent = 'hub 正常，但 Orca 没连上：先确认桌面 Orca 开着；不行再重新配对（用下一张卡）。';
+      verdict.textContent = 'hub 正常，但 Orca 没连上：先确认桌面 Orca 开着；仍不行再用下面的重新配对。';
       verdict.style.color = '#b07d24';
     } else if (!hub && orcaLive) {
       setDot('verdict-dot', 'warn');
-      verdict.textContent = '和 Orca 是通的，但 hub 连不上：检查 hub 地址 / key（下一张卡），或 VPS 是否停机。';
+      verdict.textContent = 'Orca 是通的，但 hub 连不上：检查服务器本身；要换 hub 服务器时用下面的修改入口。';
       verdict.style.color = '#b07d24';
     } else {
       setDot('verdict-dot', 'off');
-      verdict.textContent = 'hub 和 Orca 都没连上。刚装机属正常：先填 hub 地址与 key，再粘贴配对码。';
+      verdict.textContent = 'hub 和 Orca 都没连上。刚装机属正常：先修改 hub 地址与 key，再重新配对。';
       verdict.style.color = 'var(--red)';
     }
 
+    // group: gateway ↔ hub
+    setChip('hub-chip', hub ? '已连接' : '重试中…', hub ? 'chip-on' : 'chip-off');
     setDot('hub-dot', hub ? 'on' : 'off');
-    setText('hub-value', hubText);
+    setText('hub-value', hub ? '正常，和服务器保持在线' : '在后台自动重拨，隔几秒自动变');
     setText('hub-url', status.hubUrl || '—');
-    setText('hub-state', hub
-      ? ('现在和 ' + (status.hubUrl || '—') + ' 是通的。这组字段不动它就没事；只有换服务器时才需要填。')
-      : '现在没连上（已在后台自动重拨）。把它连上需要 hub 地址和 gatewayKey，两样都必须填。');
+    var keyMask = '•'.repeat(Math.max(8, Math.min((status.hubKey || '').length, 24)));
+    setText('hub-key', keyShown ? (status.hubKey || '—') : keyMask);
+    setText('key-eye', keyShown ? '🙈 隐藏' : '👁 显示');
 
+    // group: gateway ↔ orca
+    var pairedText;
+    var chipState = 'chip-off';
+    var chipText;
+    if (orcaLive) {
+      chipState = 'chip-on';
+      chipText = '在用中';
+      pairedText = '已配对，运行中' + (orcaNamed ? '（' + orcaNamed + '）' : '');
+    } else if (orca === 'disconnected' && orcaNamed) {
+      chipState = 'chip-warn';
+      chipText = '今天不在线';
+      pairedText = '已配对，但此刻不在线：查桌面 Orca 是否开着';
+    } else if (status.pairedVia === 'local-orca') {
+      chipState = 'chip-warn';
+      chipText = '本地材料';
+      pairedText = '本轮用桌面 Orca 的本地配对材料读取';
+    } else {
+      chipText = '未配对';
+      pairedText = '还没有配对材料';
+    }
+    setChip('orca-chip', chipText, chipState);
     setDot('orca-dot', orcaLive ? 'on' : orca === 'disconnected' ? 'off' : 'warn');
-    var orcaText = orca;
-    if (desc.appVersion) orcaText += ' · Orca ' + desc.appVersion;
-    if (desc.machineName) orcaText += ' · ' + desc.machineName;
-    setText('orca-value', orcaText);
-
-    var orcaNamed = desc.appVersion || desc.machineName;
-    var pairValue = orcaLive
-      ? ('已配对并在用' + (orcaNamed ? '（' + orcaNamed + '）' : ''))
-      : orca === 'disconnected' && orcaNamed
-        ? '已配对，但此刻不在线'
-        : (status.pairedVia === 'local-orca' ? '已本地配对' : '读状态中…');
-    setText('pair-state', pairValue);
-    setText('pair-card-state', orcaLive
-      ? '已和桌面 Orca 配对且正常使用中。粘贴新配对码会替换现有配对——旧设备可在桌面 Orca 里撤销，正常情况不需要操作。'
-      : '还没和 Orca 走起来。到桌面 Orca 的 设置 → 手机配对 生成一条配对码，整段粘贴到框里即可。');
+    setText('pair-state', pairedText);
+    setText('orca-value', orca === 'disconnected' && !orcaNamed ? '—' : (orca ?? '—'));
+    setText('pair-via', status.pairedVia === 'local-orca' ? '本地配对材料' : '配置文件（gateway.json）');
 
     setText('gateway-id', status.gatewayId);
     setText('config-path', status.configPath || '（未用 --config，配置无处落盘）');
@@ -312,7 +355,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   }
   function refresh() {
     fetch('/api/status').then(function (r) { return r.json(); }).then(function (payload) { render(payload.status); }).catch(function () {
-      var hubDot = document.getElementById('hub-dot'); hubDot.className = 'dot off';
+      setChip('hub-chip', '无响应', 'chip-off');
+      setDot('hub-dot', 'off');
       setText('hub-value', '管理服务无响应');
     });
   }
@@ -333,6 +377,18 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       noteEl.textContent = String(error);
     });
   }
+  document.getElementById('key-eye').addEventListener('click', function () {
+    keyShown = !keyShown;
+    refresh();
+  });
+  function toggleForm(showId, editBtnId) {
+    document.getElementById(showId).hidden = !document.getElementById(showId).hidden;
+    document.getElementById(editBtnId).hidden = !document.getElementById(showId).hidden;
+  }
+  document.getElementById('hub-edit').addEventListener('click', function () { toggleForm('hub-form', 'hub-edit'); });
+  document.getElementById('hub-cancel').addEventListener('click', function () { document.getElementById('hub-form').hidden = true; document.getElementById('hub-edit').hidden = false; });
+  document.getElementById('pair-edit').addEventListener('click', function () { toggleForm('pair-form', 'pair-edit'); });
+  document.getElementById('pair-cancel').addEventListener('click', function () { document.getElementById('pair-form').hidden = true; document.getElementById('pair-edit').hidden = false; });
   document.getElementById('save-hub').addEventListener('click', function () {
     var payload = {};
     var url = document.getElementById('server-url').value.trim();
@@ -345,6 +401,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     }
     postConfig(payload, document.getElementById('hub-note'), this, function () {
       document.getElementById('gateway-key').value = '';
+      document.getElementById('hub-form').hidden = true;
+      document.getElementById('hub-edit').hidden = false;
       refresh();
     });
   });
@@ -356,6 +414,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     }
     postConfig({ pairingCode: code }, document.getElementById('pair-note'), this, function () {
       document.getElementById('pairing-code').value = '';
+      document.getElementById('pair-form').hidden = true;
+      document.getElementById('pair-edit').hidden = false;
       refresh();
     });
   });

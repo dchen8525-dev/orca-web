@@ -28,6 +28,7 @@ const admin = new LocalAdminServer({
     configPath: config.configPath,
     pairedVia: config.pairedVia,
     hubUrl: config.serverUrl,
+    hubKey: config.gatewayKey,
     hubConnected: runtime.hub.isConnected(),
     orcaState: runtime.bridge.getState(),
     orcaDescriptor: runtime.bridge.getDescriptor(),
