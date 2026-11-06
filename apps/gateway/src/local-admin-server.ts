@@ -253,7 +253,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       <span class="chip" id="orca-chip">读状态中…</span>
     </div>
     <div class="row"><span class="label">配对状态</span><span id="pair-state" class="value muted">读状态中…</span></div>
-    <div class="row"><span class="label">Orca 信息</span><span id="orca-value" class="value muted">读状态中…</span></div>
+    <div class="row"><span class="label">Orca 连接</span><span id="orca-dot" class="dot" style="visibility:hidden"></span><span id="orca-value" class="value muted">读状态中…</span></div>
     <div class="row"><span class="label">配对写入</span><span id="pair-via" class="value muted">—</span></div>
     <div id="pair-form" hidden>
       <p class="form-note">粘贴新配对码 = <b>替换现有配对</b>。旧设备可在桌面 Orca 的设置里撤销；正常在用就不需要重新配对。</p>
@@ -354,7 +354,17 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     else { noteRow.hidden = true; }
   }
   function refresh() {
-    fetch('/api/status').then(function (r) { return r.json(); }).then(function (payload) { render(payload.status); }).catch(function () {
+    fetch('/api/status').then(function (r) { return r.json(); }).then(function (payload) {
+      try {
+        render(payload.status);
+      } catch (error) {
+        setDot('verdict-dot', 'off');
+        var verdict = document.getElementById('verdict');
+        verdict.textContent = '状态渲染出错（页面结构与服务版本不一致？）刷新本页试试。';
+        verdict.style.color = 'var(--red)';
+        console.error('admin render error', error);
+      }
+    }).catch(function () {
       setChip('hub-chip', '无响应', 'chip-off');
       setDot('hub-dot', 'off');
       setText('hub-value', '管理服务无响应');
