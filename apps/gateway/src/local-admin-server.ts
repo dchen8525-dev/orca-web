@@ -198,7 +198,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   .dek { margin: 0 0 26px; color: var(--muted); font-size: 13.5px; }
   .card { border: 1px solid var(--rule-strong); background: #fffdf9; padding: 16px 18px; margin-bottom: 18px; }
   .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-  .card-sub { text-transform: none; letter-spacing: 0.04em; color: var(--faint); font-weight: 400; }
+  .card-sub { text-transform: none; letter-spacing: 0.04em; color: var(--muted); font-weight: 400; }
   .chip { flex: none; font: 500 10px/1 sans-serif; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 9px; border: 1px solid var(--rule-strong); color: var(--muted); }
   .chip-on { color: var(--green); border-color: rgba(63, 107, 82, 0.4); background: rgba(63, 107, 82, 0.06); }
   .chip-off { color: var(--red); border-color: rgba(143, 47, 34, 0.35); background: rgba(143, 47, 34, 0.05); }
