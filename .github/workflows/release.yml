@@ -25,6 +25,13 @@ jobs:
       - run: npm ci
       - run: npm run tc
       - run: npm run release
+      - name: Package the tar.gz fallback (.cjs bundles + web dist)
+        run: |
+          mkdir -p payload/dist-server payload/web
+          cp dist-server/orca-server.cjs payload/dist-server/
+          cp dist-server/orca-gateway.cjs payload/dist-server/
+          cp -r apps/web/dist payload/web/
+          tar -czf orca-web-release.tar.gz -C payload .
       # Self-contained binaries: embed the runtime so neither the VPS nor the
       # home Windows machine needs Node, ws and node:crypto included.
       - name: Compile the standalone binaries
