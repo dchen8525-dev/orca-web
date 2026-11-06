@@ -327,6 +327,7 @@ textarea {
   margin: 0;
   font: 600 clamp(28px, 8vw, 34px) / 1.1 var(--sans);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .title-row h1 em {

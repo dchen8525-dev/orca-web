@@ -56,7 +56,7 @@ export function Board({
   const [worktrees, setWorktrees] = useState<WorktreeRow[]>([])
   const [projections, setProjections] = useState<Map<string, Projection>>(new Map())
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [initializing, setInitializing] = useState(true)
   const [creatingIn, setCreatingIn] = useState<WorktreeRow | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [folded, setFolded] = useState<Set<string>>(new Set())
@@ -101,9 +101,7 @@ export function Board({
           setError((failure as Error).message)
         }
       } finally {
-        if (!quiet) {
-          setLoading(false)
-        }
+        setInitializing(false)
       }
     },
     [hub]
@@ -325,9 +323,6 @@ export function Board({
               {notifyOn ? '提醒 ✓' : '提醒'}
             </button>
             <button onClick={onOpenAutomations}>定时</button>
-            <button onClick={() => void load(false)} disabled={!status.gatewayConnected || loading}>
-              刷新
-            </button>
             <button onClick={() => void onSignOut()}>退出</button>
           </div>
         </div>
@@ -382,7 +377,7 @@ export function Board({
           <p className="empty">家里电脑的 gateway 未连接。Orca 是否还开着？</p>
         ) : null}
         {error ? <p className="error">{error}</p> : null}
-        {loading && worktrees.length === 0 ? <p className="empty">载入中…</p> : null}
+        {initializing && worktrees.length === 0 ? <p className="empty">载入中…</p> : null}
 
         {visible.map((group) => {
           const isFolded = folded.has(group.name)
@@ -490,7 +485,7 @@ export function Board({
         {status.gatewayConnected && worktrees.length > 0 && visible.length === 0 ? (
           <p className="empty">这一栏暂时是空的。</p>
         ) : null}
-        {!loading && status.gatewayConnected && worktrees.length === 0 ? (
+        {!initializing && status.gatewayConnected && worktrees.length === 0 ? (
           <p className="empty">没有工作区</p>
         ) : null}
       </main>
