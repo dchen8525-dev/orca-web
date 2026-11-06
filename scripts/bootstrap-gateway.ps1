@@ -11,6 +11,8 @@ $releaseUrl = 'https://github.com/dchen8525-dev/orca-web/releases/latest/downloa
 $dest = Join-Path $env:APPDATA 'orca-web'
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
+Copy-Item 'scripts\gateway-loop.cmd' (Join-Path $dest 'gateway-loop.cmd') -Force
+
 if ($FromRelease) {
   Write-Host "下载自包含 exe（约 110MB）: $releaseUrl"
   Invoke-WebRequest -Uri $releaseUrl -OutFile (Join-Path $dest 'orca-gateway.exe') -UseBasicParsing
@@ -25,7 +27,6 @@ if ($FromRelease) {
   npm run bundle
   if ($LASTEXITCODE -ne 0) { throw 'bundle 失败' }
   Copy-Item 'dist-server\orca-gateway.cjs' (Join-Path $dest 'orca-gateway.cjs') -Force
-  Copy-Item 'scripts\gateway-loop.cmd' (Join-Path $dest 'gateway-loop.cmd') -Force
   Write-Host "已安装 $dest\orca-gateway.cjs"
 }
 
