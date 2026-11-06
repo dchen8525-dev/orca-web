@@ -1,43 +1,44 @@
 # Deploy
 
-Two processes on two machines, one shared secret.
+Two processes on two machines, one shared secret (the gateway key). Nothing at home has to
+listen on a public port and nothing here needs a package manager beyond itself.
 
-The scripted path: `scripts/bootstrap-server.sh <alias> <domain>` (one-shot VPS init:
-bundle + web dist + systemd + config + Caddy; keeps an existing config), then
-`scripts/bootstrap-gateway.ps1` at home (installs the gateway bundle into
-`%APPDATA%\orca-web` and wires autostart; pairing happens on the gateway's local admin
-page). Day-to-day updates: `scripts/deploy-web.sh` (typecheck + build + swap + verify) and
-`scripts/deploy-server.sh` (typecheck + bundle + restart). All target the ssh host alias
-`orca-web` by default — override with `ORCA_WEB_SSH`. Keep hostnames out of this repo; the
-ssh alias lives in the operator's `~/.ssh/config`.
+Pushing a semver tag (`v0.1.0`) triggers `.github/workflows/release.yml` and attaches:
 
-## VPS
+| artifact | what it is | where it goes |
+|---|---|---|
+| `orca-server-linux-amd64.deb` | self-contained hub binary + web dist + systemd unit (`orca-web.service`) | Debian/Ubuntu VPS |
+| `orca-gateway-windows-x64.exe` | self-contained gateway binary (runtime embedded, ~110MB) | home Windows machine |
+| `orca-web-release.tar.gz` (+ `.sha256`) | `.cjs` bundles + web dist — fallback for non-deb hosts | manual |
 
-1. `node scripts/hash-password.ts` → put the hash in `apps/server/config.json`
-   (`passwordHash`), generate the gateway key (`openssl rand -base64 32`) into the same file.
-   Set `publicOrigin` to the real origin and `trustProxy: true` behind Caddy.
-   Set `sessionStorePath` (e.g. `/var/lib/orca-web/sessions.json`): it holds hashed session keys
-   only, and without it every server restart logs the browser out.
-2. systemd:
+"Self-contained" means the bun runtime is compiled in: neither the VPS nor the home machine
+needs Node.
 
-```ini
-[Unit]
-Description=orca-web hub
-After=network-online.target
+## VPS, fresh
 
-[Service]
-WorkingDirectory=/opt/orca-web
-ExecStart=/usr/bin/node apps/server/src/main.ts
-Restart=always
-RestartSec=2
-Environment=ORCA_WEB_SERVER_CONFIG=/etc/orca-web/server.json
-StateDirectory=orca-web
-ReadWritePaths=/var/lib/orca-web
-UMask=0077
+`bash scripts/bootstrap-server.sh --remote <sslip-domain>` — the script sshes over (default
+alias `orca-web`, override `ORCA_WEB_SSH`), the VPS downloads the latest release deb,
+verifies its sha256, and `dpkg -i`s it. On first install the postinst creates the
+`orca-web` system user, generates `/etc/orca-web/server.json`
+(`--init-config` writes gateway key + password hash, password printed once in the dpkg
+output) and starts `orca-web.service`. Without a repo on the operator side, that is the whole
+install. Existing configs on an upgrade are never overwritten; the deb's postinst only
+replaces the unit file and restarts.
 
-[Install]
-WantedBy=multi-user.target
-```
+From a repo checkout instead: `bash scripts/bootstrap-server.sh <alias> <domain>` builds the
+same payload locally (bun cross-compile + web dist) and installs over ssh — handy to test
+uncommitted changes without tagging.
+
+The pre-written config shape (if you'd rather not let `--init-config` create it):
+
+1. `node scripts/hash-password.ts` → `passwordHash`, and `openssl rand -base64 32` →
+   `gatewayKey`, into `/etc/orca-web/server.json`. Set `publicOrigin`/`trustProxy` behind
+   Caddy and `sessionStorePath: /var/lib/orca-web/sessions.json` (hashed session keys only;
+   without it every restart logs the browser out).
+2. The unit the deb installs (`/lib/systemd/system/orca-web.service`) runs the binary directly
+   (no Node), `User=orca-web`, hardened (`ProtectSystem=strict`, `PrivateTmp=true`). If a
+   hand-rolled unit exists in `/etc/systemd/system` it shadows the packaged one — delete that
+   copy when moving to the deb.
 
 3. Caddy (TLS + WebSocket upgrade are automatic):
 
@@ -47,59 +48,56 @@ orca.example.com {
 }
 ```
 
-The server binds loopback only; Caddy terminates TLS. `X-Forwarded-For` feeds login rate limiting
-because `trustProxy` is on.
+The server binds loopback only; Caddy terminates TLS. `X-Forwarded-For` feeds login rate
+limiting because `trustProxy` is on. The bootstrap scripts add this site block for you when
+missing.
 
-## Home machine
+## Home machine, fresh
 
-`apps/gateway/config.json` with `serverUrl: wss://orca.example.com/gateway`, the same
-`gatewayKey`, and the Orca pairing material:
+`powershell -File scripts/bootstrap-gateway.ps1 -FromRelease` — downloads the standalone exe
+into `%APPDATA%\orca-web`, writes the Startup-folder vbs, restarts any in-flight gateway
+process, opens the admin page: `http://127.0.0.1:8790`. Everything gets wired there (hub
+address, gateway key, `orca://pair?code=…`); pairing is scoped to a `mobile` device in Orca.
 
-```json
-{
-  "serverUrl": "wss://orca.example.com/gateway",
-  "gatewayKey": "…",
-  "gatewayId": "home-desktop",
-  "orca": {
-    "endpoint": "ws://127.0.0.1:6768",
-    "deviceToken": "…",
-    "hostPublicKeyB64": "…"
-  }
-}
-```
+Without `-FromRelease` (repo checkout): the script bundles from source
+(`dist-server\orca-gateway.cjs`, needs Node 24 + npm) and installs the same layout with a
+`gateway-loop.cmd` that prefers the exe if present, falling back to node + `.cjs`.
 
-Get the last two by pairing a `mobile`-scope device in Orca and copying `endpoint`, `deviceToken`,
-`publicKeyB64` from the `orca://pair?code=…` payload. The token is a bearer credential: keep the
-config file at `0600` and out of git. Revoke the device in Orca if the file leaks.
+The process keeps running via `gateway-loop.cmd` (restarts 10s after an exit) launched hidden
+at logon with no console window — a logon trigger is deliberate: the gateway must run as the
+same user as desktop Orca to reach `127.0.0.1` with its pairing material. It never listens on
+a public port, so no router or firewall change is needed at home.
 
-Run it under systemd (or Task Scheduler on Windows) beside desktop Orca. It never listens on a
-public port, so no router or firewall change is needed at home.
+## Config on disk
 
-The gateway opens one loopback-only page at `http://127.0.0.1:8790` (`admin.port` or
-`ORCA_WEB_ADMIN_PORT` moves it): connection status, hub address/key, and a box for a fresh
-`orca://pair?code=…`. Changes load in place — validate, write the config file, swap the
-connections — and the process restarts itself if a swap fails. Run the gateway with `--config`
-so the page has somewhere to persist what you type.
+- VPS: `/etc/orca-web/server.json` (bearer credentials — `0600`, root-owned, out of git),
+  sessions in `/var/lib/orca-web/sessions.json`.
+- Home: `%APPDATA%\orca-web\gateway.json`. The device token is a bearer credential: keep the
+  file at `0600` and out of git; revoke the device in Orca if it leaks.
+- Upgrade path: config files survive both the deb and the bootstrap scripts (generation
+  happens only when the file is absent), the admin page owns later edits.
 
 ## Checks
 
-- `curl https://orca.example.com/api/health` → `gateway.connected: true`
-- log in, then `dev:server-check` equivalents against the real origin
+- `curl https://orca.example.com/api/health` → `gateway.connected: true` after pairing
+- log in over https; the login page is the whole auth surface (no separate admin UI on the VPS)
 - rotate: change the password hash + restart; re-pair the gateway device to replace its token
 
 ## Current deployment
 
 The live instance runs on a small Debian 13 VPS: Caddy in front, `orca-web.service` under
 `/opt/orca-web`, config in `/etc/orca-web/server.json`, sessions in
-`/var/lib/orca-web/sessions.json`. Hostnames and credentials are deliberately not recorded in this
-repo.
+`/var/lib/orca-web/sessions.json`. Hostnames and credentials are deliberately not recorded in
+this repo.
 
-No domain was bought for it. `sslip.io` resolves `<ip-with-dashes>.sslip.io` to that bare IP, so a
-throwaway hostname like `203-0-113-7.sslip.io` gets a real Let's Encrypt certificate. That matters:
-a self-signed or plain-HTTP origin would break `crypto.subtle` and `crypto.randomUUID`, which the
-mutation envelope needs.
+No domain was bought for it. `sslip.io` resolves `<ip-with-dashes>.sslip.io` to that bare IP,
+so a throwaway hostname like `203-0-113-7.sslip.io` gets a real Let's Encrypt certificate.
+That matters: a self-signed or plain-HTTP origin would break `crypto.subtle` and
+`crypto.randomUUID`, which the mutation envelope needs.
 
-Windows autostart: `scripts/gateway-loop.cmd` runs the gateway and restarts it if it exits;
-`scripts/gateway-autostart.vbs` (copied into the user's Startup folder) launches that loop hidden at
-logon. A logon trigger is deliberate — the gateway must run as the same user as desktop Orca to read
-its pairing material and reach `127.0.0.1`.
+## See also
+
+Bootstrap details: `scripts/bootstrap-server.sh`, `scripts/bootstrap-gateway.ps1` — both are
+commented; install/checks are deliberately inlined rather than shelling out to a second layer.
+Loose ends (hot swaps, one-time unit rewrites) belong to the day-to-day scripts:
+`scripts/deploy-web.sh`, `scripts/deploy-server.sh`.

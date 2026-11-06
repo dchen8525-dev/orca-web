@@ -1,68 +1,58 @@
 #!/usr/bin/env bash
-# One-shot VPS initialization for the hub. Run from the dev machine:
-#   bash scripts/bootstrap-server.sh [ssh-target] [domain]
-# Installs (or upgrades): bundled server, web dist, systemd unit, config with a freshly
-# generated gateway key plus one-time admin password, Caddy site. Existing config kept.
-# Home-side pairing is NOT part of this — paste the printed gatewayKey into the
-# gateway admin page (see scripts/bootstrap-gateway.ps1).
+# Bring up (or upgrade) the hub on a Debian/Ubuntu VPS. Two payload sources:
+#   bash scripts/bootstrap-server.sh <ssh-target> <domain>   build here (bun + npm), upload, install
+#   bash scripts/bootstrap-server.sh --remote <sslip-domain> no repo needed: the VPS pulls the
+#                                                           latest release deb and dpkg -i's it
+# Both modes: keep an existing /etc/orca-web/server.json untouched, write the systemd unit,
+# add the Caddy site if missing, then health-check https://<domain>/api/health.
+# Pairing happens later on the home gateway admin page (server + gateway stay decoupled).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TARGET="${1:-${ORCA_WEB_SSH:-orca-web}}"
-DOMAIN="${2:-}"
+REPO="${ORCA_WEB_REPO:-https://github.com/dchen8525-dev/orca-web}"
+DEB_URL="$REPO/releases/latest/download/orca-server-linux-amd64.deb"
 
-if [ "${1:-}" = "" ] && [ "${2:-}" = "" ]; then
-  read -rp "ssh 目标 [$TARGET]: " _t
-  TARGET="${_t:-$TARGET}"
-  read -rp "域名（如 8-8-8-8.sslip.io）: " DOMAIN
-fi
-[ -n "$DOMAIN" ] || { echo "域名是必需的：bootstrap-server.sh <ssh-target> <domain>"; exit 1; }
-
-npm run tc
-npm run release
-
-PASSWORD=$(openssl rand -hex 6)
-HASH=$(node scripts/hash-password.ts "$PASSWORD" | tail -1)
-
-rm -rf /tmp/orca-release && mkdir /tmp/orca-release
-cp dist-server/orca-server.cjs /tmp/orca-release/
-rm -rf /tmp/orca-release/dist
-cp -r apps/web/dist /tmp/orca-release/dist
-tar -czf /tmp/orca-web-release.tgz -C /tmp/orca-release .
-rm -rf /tmp/orca-release
-scp -q /tmp/orca-web-release.tgz "$TARGET":/tmp/
-
-ssh "$TARGET" bash -s -- "$DOMAIN" "$HASH" <<'REMOTE'
-set -e
-DOMAIN="$1"
-HASH="$2"
-mkdir -p /opt/orca-web/dist-server /var/lib/orca-web /etc/orca-web
-
-if ! command -v node >/dev/null || [ "$(node -p 'Number(process.versions.node.split(".")[0])')" -lt 24 ]; then
-  echo "node >= 24 missing; install it first (https://nodejs.org/en/download), then re-run"
-  exit 1
-fi
-
-cd /opt/orca-web
-tar -xzf /tmp/orca-web-release.tgz -C .
-rm -f /tmp/orca-web-release.tgz
-mv orca-server.cjs dist-server/orca-server.cjs
-if [ -d dist ]; then
-  if [ -d apps/web/dist ]; then
-    mv apps/web/dist "apps/web/dist.bak-$(date +%Y%m%d%H%M%S)"
-  fi
-  mv dist apps/web/dist
-fi
-
-if [ ! -f /etc/orca-web/server.json ]; then
-  KEY=$(openssl rand -base64 32 | tr -d '\n')
-  printf '{"passwordHash":"%s","gatewayKey":"%s","publicOrigin":"https://%s","trustProxy":true,"staticDir":"apps/web/dist","sessionStorePath":"/var/lib/orca-web/sessions.json"}\n' \
-    "$HASH" "$KEY" "$DOMAIN" > /etc/orca-web/server.json
-  chmod 600 /etc/orca-web/server.json
-  echo "gateway key (paste into the gateway admin page): $KEY"
+REMOTE=0
+TARGET=""
+if [ "${1:-}" = "--remote" ]; then
+  REMOTE=1
+  TARGET="${ORCA_WEB_SSH:-orca-web}"
+  DOMAIN="${2:-}"
+elif [ -n "${1:-}" ]; then
+  TARGET="$1"
+  DOMAIN="${2:-}"
 else
-  echo "keeping existing /etc/orca-web/server.json"
+  TARGET="${ORCA_WEB_SSH:-orca-web}"
+  read -rp "域名（如 144-34-186-164.sslip.io）: " DOMAIN
 fi
+[ -n "$DOMAIN" ] || { echo "域名必需：bootstrap-server.sh [--remote] <ssh-target> <domain>"; exit 1; }
+
+# ---------- payload: local build ----------
+if [ "$REMOTE" = 0 ]; then
+  echo "== 本地构建（bun 交叉编译 + web 静态文件）"
+  npm run tc
+  npm run web:build
+  PAYLOAD=/tmp/orca-bootstrap-payload
+  rm -rf "$PAYLOAD" && mkdir -p "$PAYLOAD/dist-server" "$PAYLOAD/apps/web"
+  bun build --compile apps/server/src/main.ts --target=bun-linux-x64 --outfile "$PAYLOAD/dist-server/orca-server"
+  cp -r apps/web/dist "$PAYLOAD/apps/web/dist"
+  tar -czf /tmp/orca-bootstrap.tar.gz -C "$PAYLOAD" dist-server apps
+  scp /tmp/orca-bootstrap.tar.gz "$TARGET:/tmp/"
+fi
+
+# ---------- install: local upload ----------
+if [ "$REMOTE" = 0 ]; then
+  echo "== 远端安装"
+  ssh "$TARGET" bash -s -- "$DOMAIN" <<INSTALL
+set -euo pipefail
+DOMAIN="\$1"
+mkdir -p /opt/orca-web/dist-server /opt/orca-web/apps /etc/orca-web
+id -u orca-web >/dev/null 2>&1 || adduser --system --group --home /opt/orca-web orca-web
+
+systemctl stop orca-web.service 2>/dev/null || true
+tar -xzf /tmp/orca-bootstrap.tar.gz -C /opt/orca-web
+chmod 755 /opt/orca-web/dist-server/orca-server
+rm -f /tmp/orca-bootstrap.tar.gz
 
 cat > /etc/systemd/system/orca-web.service <<'UNIT'
 [Unit]
@@ -75,10 +65,9 @@ Type=simple
 User=orca-web
 Group=orca-web
 WorkingDirectory=/opt/orca-web
-ExecStart=/usr/bin/env node /opt/orca-web/dist-server/orca-server.cjs
+ExecStart=/opt/orca-web/dist-server/orca-server --config /etc/orca-web/server.json
 Restart=always
 RestartSec=2
-Environment=ORCA_WEB_SERVER_CONFIG=/etc/orca-web/server.json
 StateDirectory=orca-web
 ReadWritePaths=/var/lib/orca-web
 UMask=0077
@@ -91,32 +80,60 @@ ProtectHome=true
 WantedBy=multi-user.target
 UNIT
 
-if ! id orca-web >/dev/null 2>&1; then
-  useradd --system --home-dir /opt/orca-web --no-create-home orca-web
+if [ ! -f /etc/orca-web/server.json ]; then
+  /opt/orca-web/dist-server/orca-server --init-config /etc/orca-web/server.json --public-origin "https://\$DOMAIN"
+  chmod 600 /etc/orca-web/server.json
 fi
-chown -R orca-web:orca-web /opt/orca-web/dist-server /opt/orca-web/apps/web/dist /var/lib/orca-web
 systemctl daemon-reload
 systemctl enable --now orca-web.service
-systemctl restart orca-web.service
-
-if command -v caddy >/dev/null; then
-  cat > /etc/caddy/Caddyfile <<CADDY
-$DOMAIN {
-	encode zstd gzip
-	reverse_proxy 127.0.0.1:8788
-}
-CADDY
-  systemctl reload caddy
-  echo "caddy site written for $DOMAIN"
-else
-  echo "caddy 不在：先安装 caddy，或自配反代到 127.0.0.1:8788"
+INSTALL
 fi
 
-systemctl is-active orca-web.service
-curl -s --max-time 5 http://127.0.0.1:8788/api/health
-REMOTE
+# ---------- install: remote pulls the release deb ----------
+if [ "$REMOTE" = 1 ]; then
+  echo "== 远端拉取最新 release deb"
+  ssh "$TARGET" bash -s -- "$DOMAIN" "$DEB_URL" <<DEBPULL
+set -euo pipefail
+DOMAIN="\$1"
+DEB_URL="\$2"
+apt-get update -qq >/dev/null 2>&1 || true
+apt-get install -y -qq curl >/dev/null 2>&1 || true
+mkdir -p /etc/orca-web
+echo "\$DOMAIN" > /etc/orca-web/domain.txt
+curl -fsSL -o /tmp/orca-server.deb "\$DEB_URL"
+sha_url="\${DEB_URL}.sha256"
+if curl -fsSL -o /tmp/orca-server.deb.sha256 "\$sha_url"; then
+  ( cd /tmp && sha256sum -c orca-server.deb.sha256 )
+fi
+dpkg -i /tmp/orca-server.deb
+rm -f /tmp/orca-server.deb /tmp/orca-server.deb.sha256 /etc/orca-web/domain.txt
+DEBPULL
+fi
 
-echo
-echo "━━━ bootstrap done ━━━"
-echo "登录密码（只显示这一次）: $PASSWORD"
-echo "验证: https://$DOMAIN/api/health"
+# ---------- caddy site (both modes) ----------
+echo "== Caddy 站点"
+ssh "$TARGET" bash -s -- "$DOMAIN" <<CADDY
+set -euo pipefail
+if ! command -v caddy >/dev/null 2>&1; then
+  echo "未安装 caddy，跳过站点配置（可按 DEPLOY.md 手动加）"
+  exit 0
+fi
+if grep -q "^\$1 {" /etc/caddy/Caddyfile 2>/dev/null; then
+  echo "caddy 站点已存在"
+else
+  printf '\n\$1 {\n\tencode zstd gzip\n\treverse_proxy 127.0.0.1:8788\n}\n' >> /etc/caddy/Caddyfile
+fi
+caddy validate --config /etc/caddy/Caddyfile >/dev/null
+systemctl reload caddy || systemctl restart caddy
+CADDY
+
+echo "== 健康检查"
+for _ in 1 2 3 4 5; do
+  if curl -fsS "https://$DOMAIN/api/health" >/dev/null 2>&1; then
+    echo "✅ https://$DOMAIN 已在服务"
+    exit 0
+  fi
+  sleep 3
+done
+echo "⚠️ /api/health 暂时没通：先看 journalctl -u orca-web -n 50（若首次安装，密码已打印在上面）" >&2
+exit 1

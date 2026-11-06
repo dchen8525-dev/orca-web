@@ -1,12 +1,20 @@
 // VPS entry point: HTTP login + static app, WSS for browsers (/client) and the home gateway (/gateway).
 import { createServer, type IncomingMessage } from 'node:http'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { WebSocketServer } from 'ws'
 import { loadServerConfig } from './config.ts'
 import { createRequestHandler, isAuthenticated } from './http-app.ts'
+import { hashPassword } from './passwords.ts'
 import { Hub } from './hub.ts'
 import { SessionStore } from './sessions.ts'
 
 const args = parseArgs(process.argv.slice(2))
+if (args.initConfig) {
+  await initConfig(args.initConfig, args.publicOrigin)
+  process.exit(0)
+}
 const config = loadServerConfig(args.config)
 const sessions = new SessionStore(config.sessionTtlMs, config.sessionStorePath)
 const hub = new Hub({ gatewayKey: config.gatewayKey, log })
@@ -68,17 +76,54 @@ function originAllowed(request: IncomingMessage, publicOrigin: string | undefine
   return request.headers.origin === publicOrigin
 }
 
-function parseArgs(argv: string[]): { config?: string } {
-  const parsed: { config?: string } = {}
+function parseArgs(argv: string[]): { config?: string; initConfig?: string; publicOrigin?: string } {
+  const parsed: { config?: string; initConfig?: string; publicOrigin?: string } = {}
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === '--config') {
       parsed.config = argv[++index]
-      if (!parsed.config) {
-        throw new Error('--config needs a path')
-      }
+    } else if (argv[index] === '--init-config') {
+      parsed.initConfig = argv[++index]
+    } else if (argv[index] === '--public-origin') {
+      parsed.publicOrigin = argv[++index]
+    }
+  }
+  if ((parsed.config ?? parsed.initConfig) === undefined) {
+    throw new Error('--config 或 --init-config 必须二选一')
+  }
+  for (const [flag, value] of Object.entries(parsed)) {
+    if (value === undefined) {
+      throw new Error(`${flag} 需要一个参数`)
     }
   }
   return parsed
+}
+
+// bootstrap/deb 专用：生成 server.json（永不覆盖已有配置），密码只在这里显示一次。
+async function initConfig(outPath: string, publicOrigin?: string): Promise<void> {
+  if (existsSync(outPath)) {
+    throw new Error(`配置已存在，拒绝覆盖: ${outPath}`)
+  }
+  const password = randomBytes(6).toString('hex')
+  const cfg: Record<string, unknown> = {
+    host: '127.0.0.1',
+    port: 8788,
+    gatewayKey: randomBytes(24).toString('base64'),
+    passwordHash: hashPassword(password),
+    staticDir: 'apps/web/dist',
+    sessionStorePath: '/var/lib/orca-web/sessions.json'
+  }
+  if (publicOrigin) {
+    cfg.publicOrigin = publicOrigin
+    cfg.cookieSecure = publicOrigin.startsWith('https://')
+    cfg.trustProxy = true
+  }
+  mkdirSync(dirname(outPath), { recursive: true })
+  writeFileSync(outPath, `${JSON.stringify(cfg, null, 2)}\n`, { mode: 0o600 })
+  console.log(`配置已生成: ${outPath}`)
+  console.log(`登录密码（只显示这一次，请立即保存）: ${password}`)
+  if (publicOrigin) {
+    console.log(`https:// 配置已写入 publicOrigin: ${publicOrigin}`)
+  }
 }
 
 function log(message: string): void {

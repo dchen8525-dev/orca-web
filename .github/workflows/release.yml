@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  BUN_VERSION: '1.4.4'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: npm ci
+      - run: npm run tc
+      - run: npm run release
+      # Self-contained binaries: embed the runtime so neither the VPS nor the
+      # home Windows machine needs Node, ws and node:crypto included.
+      - name: Compile the standalone binaries
+        run: |
+          bun build --compile apps/gateway/src/main.ts --target=bun-windows-x64 --outfile orca-gateway-windows-x64.exe
+          bun build --compile apps/server/src/main.ts --target=bun-linux-x64 --outfile orca-server-linux-x64
+      - name: Package the Linux deb
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          deb=$(mktemp -d)
+          mkdir -p \
+            "$deb/DEBIAN" \
+            "$deb/opt/orca-web/dist-server" \
+            "$deb/opt/orca-web/apps/web" \
+            "$deb/lib/systemd/system"
+          cp orca-server-linux-x64 "$deb/opt/orca-web/dist-server/orca-server"
+          chmod 755 "$deb/opt/orca-web/dist-server/orca-server"
+          cp -r apps/web/dist "$deb/opt/orca-web/apps/web/dist"
+          {
+            echo 'Package: orca-web-server'
+            echo "Version: $version"
+            echo 'Section: web'
+            echo 'Priority: optional'
+            echo 'Architecture: amd64'
+            echo 'Maintainer: orca-web deploy <deploy@orca-web.invalid>'
+            echo 'Description: orca-web hub — login, board and the phone client'
+            echo ' Self-contained server binary plus the web build; systemd unit orca-web.service.'
+            echo ' Config at /etc/orca-web/server.json (kept on upgrade, generated on first install).'
+          } > "$deb/DEBIAN/control"
+          cat > "$deb/DEBIAN/prerm" <<'SH'
+          #!/bin/sh
+          set -e
+          if command -v systemctl >/dev/null 2>&1; then
+            if systemctl is-active --quiet orca-web.service; then
+              systemctl stop orca-web.service
+            fi
+          fi
+          SH
+          cat > "$deb/DEBIAN/postinst" <<'SH'
+          #!/bin/sh
+          set -e
+          if ! getent passwd orca-web >/dev/null; then
+            adduser --system --group --home /opt/orca-web orca-web
+          fi
+          if [ ! -f /etc/orca-web/server.json ]; then
+            mkdir -p /etc/orca-web
+            domain=""
+            if [ -s /etc/orca-web/domain.txt ]; then
+              domain="$(tail -n 1 /etc/orca-web/domain.txt)"
+            fi
+            if [ -n "$domain" ]; then
+              /opt/orca-web/dist-server/orca-server --init-config /etc/orca-web/server.json --public-origin "https://$domain"
+            else
+              /opt/orca-web/dist-server/orca-server --init-config /etc/orca-web/server.json
+            fi
+            chmod 600 /etc/orca-web/server.json
+          fi
+          if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload
+            systemctl enable orca-web.service
+            systemctl restart orca-web.service
+          fi
+          SH
+          chmod 755 "$deb/DEBIAN/prerm" "$deb/DEBIAN/postinst"
+          # Unit ships with the new-style ExecStart (no node); postinst replaces any old hand-rolled unit.
+          unit="$deb/lib/systemd/system/orca-web.service"
+          cat > "$unit" <<UNIT
+          [Unit]
+          Description=orca-web hub
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=orca-web
+          Group=orca-web
+          WorkingDirectory=/opt/orca-web
+          ExecStart=/opt/orca-web/dist-server/orca-server --config /etc/orca-web/server.json
+          Restart=always
+          RestartSec=2
+          StateDirectory=orca-web
+          ReadWritePaths=/var/lib/orca-web
+          UMask=0077
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectSystem=strict
+          ProtectHome=true
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          dpkg-deb --root-owner-group --build "$deb" orca-server-linux-amd64.deb
+        shell: bash
+      - name: Hash everything
+        run: |
+          for f in orca-server-linux-amd64.deb orca-gateway-windows-x64.exe orca-web-release.tar.gz; do
+            sha256sum "$f" > "$f.sha256"
+          done
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            orca-server-linux-amd64.deb orca-server-linux-amd64.deb.sha256 \
+            orca-gateway-windows-x64.exe orca-gateway-windows-x64.exe.sha256 \
+            orca-web-release.tar.gz orca-web-release.tar.gz.sha256

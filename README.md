@@ -222,23 +222,36 @@ npm run gateway
 
 ## 部署
 
-两台机器两个进程；凭据和主机名不进仓库。运行时都是**单个打包文件**（esbuild 内联 `ws` 等所有依赖），
-机器上只要有 Node 24，不需要 npm install、不需要源码。
+两台机器两个进程；凭据和主机名不进仓库。运行时都是**自包含文件**：`bun build --compile` 把
+运行时一并编进去，VPS 和家里都不需要装 Node。打一个 semver tag（如 `v0.1.0`）会触发
+[release workflow](.github/workflows/release.yml)，产物挂在 GitHub Release 里：
 
-从零安装（各一条命令）：
+| artifact | 用途 |
+|---|---|
+| `orca-server-linux-amd64.deb` | hub：二进制 + 静态页 + systemd unit，`dpkg -i` 即装即升 |
+| `orca-gateway-windows-x64.exe` | 家里 gateway：免装 Node，双击进管理页 |
+| `orca-web-release.tar.gz` | 手动兜底（非 deb 主机）；`.sha256` 校验用 |
+
+从零安装（各一条命令，都可以在任何一台新机器上开始）：
 
 ```bash
-# VPS：一个单元搞定 bundle + 静态页 + systemd + 配置 + Caddy，密码和 gateway key 只打印一次
-bash scripts/bootstrap-server.sh orca-web <你的域名>
+# VPS：远端自己拉最新 release deb + sha256 校验 + dpkg -i + systemd + Caddy 站点
+bash scripts/bootstrap-server.sh --remote <你的域名>
 
-# 家里（repo 里运行一次；需要 Node 24）
-powershell scripts\bootstrap-gateway.ps1   # 装到 %APPDATA%\orca-web，接管自启，打开管理页
+# 或本机带 repo 时本地构建再上传（验证未提交的改动用）
+bash scripts/bootstrap-server.sh orca-web <你的域名>
 ```
 
-家里唯一的"手工"步骤：在 `http://127.0.0.1:8790` 的本机管理页把 bootstrap-server 打印的
-gatewayKey 贴进去，再粘贴桌面 Orca 生成的 `orca://pair?code=…` 配对码。
+```powershell
+# 家里：下载 release 的自包含 exe 装到 %APPDATA%\orca-web，接管自启，打开管理页
+powershell scripts\bootstrap-gateway.ps1 -FromRelease
+```
 
-日常更新：
+首次安装的登录密码和 gateway key 只打印一次（VPS 在 `dpkg -i` 输出 / 初始化日志里）。
+家里唯一的"手工"步骤：在 `http://127.0.0.1:8790` 的本机管理页把打印出的 gatewayKey 贴进去，
+再粘贴桌面 Orca 生成的 `orca://pair?code=…` 配对码。已有配置不会被覆盖，升级就是重装覆盖二进制。
+
+日常更新（repo 里的热更新路径，不经 release）：
 
 ```bash
 bash scripts/deploy-web.sh      # 前端改动后：tc + build + scp + 原子换 dist + 校验 hash
@@ -251,7 +264,7 @@ bash scripts/deploy-server.sh   # 改了 apps/server、apps/gateway、src/shared
 
 要点：
 
-- **服务端产物**：VPS 跑 `/opt/orca-web/dist-server/orca-server.cjs`（配置 `/etc/orca-web/server.json`，
+- **服务端产物**：VPS 跑 `/opt/orca-web/dist-server/orca-server`（配置 `/etc/orca-web/server.json`，
   静态目录 `/opt/orca-web/apps/web/dist`）；部署前旧文件会留成 `dist.bak-*` / `src-backup-*.tgz`，
   回滚就是把备份 `mv` 回来。
 - **验证**：`https://<域名>/api/health` 要 `"gateway":{"connected":true,…}`；
@@ -260,14 +273,16 @@ bash scripts/deploy-server.sh   # 改了 apps/server、apps/gateway、src/shared
 
 ### 家里 gateway 的常驻（Windows，本机现状）
 
-1. 一切都在 `%APPDATA%\orca-web\`：`orca-gateway.cjs`（bundle）、`gateway.json`（hub 地址、
-   gatewayKey、Orca 配对材料——bearer 凭据，权限收紧）、`gateway-loop.cmd`、`gateway.log`。
+1. 一切都在 `%APPDATA%\orca-web\`：`orca-gateway.exe`（release 自包含 exe）或
+   `orca-gateway.cjs`（bundle 兜底）、`gateway.json`（hub 地址、gatewayKey、Orca 配对材料——
+   bearer 凭据，权限收紧）、`gateway-loop.cmd`、`gateway.log`。
 2. `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\orca-web-gateway.vbs`：
    登录时无窗口拉起 loop（模板 `scripts\gateway-autostart.vbs`），进程退出 10 秒重启。
 3. **用登录触发是刻意的**：gateway 必须和桌面 Orca 同用户，才读得到配对材料、连得上
    `127.0.0.1` 的 Orca 端点——服务/计划任务以其他身份跑反而拿不到凭据。
-4. 升级/重装 gateway：重跑一遍 `powershell scripts\bootstrap-gateway.ps1`，它会停掉旧进程
-   与旧自启循环、装新 bundle；**不会动** `gateway.json`。
+4. 升级/重装 gateway：重跑一遍 `powershell scripts\bootstrap-gateway.ps1 -FromRelease`
+   （或 repo 里不带参数跑 bundle 版），它会停掉旧进程与旧自启循环、装新版本；
+   **不会动** `gateway.json`。
 
 排查顺序：`%APPDATA%\orca-web\gateway.log`（家里）→ `journalctl -u orca-web.service`（VPS）→
 浏览器登录页的连接状态条。改 hub 地址、gatewayKey 或换配对码不用碰文件，开
