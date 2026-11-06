@@ -9,6 +9,7 @@ import {
   type GatewayConfig
 } from './config.ts'
 import { LocalAdminServer } from './local-admin-server.ts'
+import { checkForUpdate, currentVersion, installedExePath, stageSelfUpdate } from './self-update.ts'
 import { HubLink } from './hub-link.ts'
 import { OrcaBridge } from './orca-bridge.ts'
 
@@ -24,6 +25,16 @@ runtime.hub.start()
 
 const admin = new LocalAdminServer({
   port: config.adminPort,
+  updateStatus: installedExePath() ? () => checkForUpdate() : undefined,
+  applyUpdate: installedExePath()
+    ? async () => {
+        const message = await stageSelfUpdate()
+        // Let the response flush, then go down so gateway-loop.cmd restarts from the
+        // staged exe; the rename is already done, so nothing else can undo it.
+        setTimeout(() => process.exit(0), 1000).unref()
+        return message
+      }
+    : undefined,
   status: () => ({
     gatewayId: config.gatewayId,
     configPath: config.configPath,
@@ -33,7 +44,8 @@ const admin = new LocalAdminServer({
     hubConnected: runtime.hub.isConnected(),
     orcaState: runtime.bridge.getState(),
     orcaDescriptor: runtime.bridge.getDescriptor(),
-    configNote: describeConfigSource(config)
+    configNote: describeConfigSource(config),
+    version: currentVersion()
   }),
   readFile: () => {
     try {

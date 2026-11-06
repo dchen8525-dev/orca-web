@@ -15,6 +15,8 @@ export type AdminStatus = {
   orcaState: string
   orcaDescriptor: Record<string, unknown>
   configNote: string | null
+  /** Build version baked in at compile time; null for dev/bundle installs. */
+  version: string | null
 }
 
 export type LocalAdminOptions = {
@@ -23,6 +25,13 @@ export type LocalAdminOptions = {
   /** Config file as on disk (fresh per read, never cached by the page render). */
   readFile: () => string | null
   apply: (updates: ConfigUpdates) => Promise<string>
+  /** Self-update surface (release exe only): null means "not available". */
+  updateStatus?: () => Promise<{
+    version: string | null
+    latest: string | null
+    updateAvailable: boolean
+  }>
+  applyUpdate?: () => Promise<string>
 }
 
 const BODY_LIMIT = 64 * 1024
@@ -87,17 +96,62 @@ export class LocalAdminServer {
       await this.handleConfig(request, response)
       return
     }
+    if (request.method === 'GET' && path === '/api/update-status') {
+      await this.handleUpdateStatus(response)
+      return
+    }
+    if (request.method === 'POST' && path === '/api/update') {
+      await this.handleUpdate(request, response)
+      return
+    }
     tryJson(response, 404, { ok: false, error: 'not found' })
   }
 
-  private async handleConfig(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    // Same-origin enforcement: a web page elsewhere must not be able to rewrite this config.
+  private sameOriginRequest(request: IncomingMessage): boolean {
+    // Same-origin enforcement for machine-changing calls (/api/config, /api/update):
+    // a web page elsewhere must not be able to rewrite this config or swap binaries.
     const origin = request.headers.origin
     const sameOrigin =
       origin === undefined || origin === `http://127.0.0.1:${this.options.port}`
     const fetchSite = request.headers['sec-fetch-site']
-    const isCrossSiteForm = fetchSite !== undefined && fetchSite !== 'same-origin' && fetchSite !== 'none'
-    if (!sameOrigin || isCrossSiteForm || request.headers['x-orca-web-admin'] !== '1') {
+    const isCrossSite = fetchSite !== undefined && fetchSite !== 'same-origin' && fetchSite !== 'none'
+    return sameOrigin && !isCrossSite && request.headers['x-orca-web-admin'] === '1'
+  }
+
+  private async handleUpdateStatus(response: ServerResponse): Promise<void> {
+    if (!this.options.updateStatus) {
+      tryJson(response, 501, { ok: false, error: '本机不是 release exe 安装，没有自助更新' })
+      return
+    }
+    try {
+      const check = await this.options.updateStatus()
+      tryJson(response, 200, { ok: true, ...check })
+    } catch (error) {
+      tryJson(response, 500, { ok: false, error: `检查失败：${(error as Error).message}` })
+    }
+  }
+
+  private async handleUpdate(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (!this.options.applyUpdate) {
+      tryJson(response, 501, { ok: false, error: '本机不是 release exe 安装，没有自助更新' })
+      return
+    }
+    if (!this.sameOriginRequest(request)) {
+      tryJson(response, 403, { ok: false, error: '跨站更新请求被拒绝' })
+      return
+    }
+    console.log(`${new Date().toISOString()} self-update requested from admin page`)
+    try {
+      const message = await this.options.applyUpdate()
+      tryJson(response, 200, { ok: true, message })
+    } catch (error) {
+      console.error(`${new Date().toISOString()} self-update failed: ${(error as Error).message}`)
+      tryJson(response, 500, { ok: false, error: (error as Error).message })
+    }
+  }
+
+  private async handleConfig(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (!this.sameOriginRequest(request)) {
       tryJson(response, 403, { ok: false, error: '跨站配置请求被拒绝' })
       return
     }
@@ -277,6 +331,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
   <section class="card">
     <div class="row"><span class="label">网关 id</span><span class="dot" style="visibility:hidden"></span><span id="gateway-id" class="value muted"></span></div>
+    <div class="row"><span class="label">网关版本</span><span class="dot" style="visibility:hidden"></span><span id="version" class="value muted">—</span><span class="dot" style="visibility:hidden"></span><button id="update-btn" class="ghost-inline" type="button" hidden>检查更新</button></div>
+    <div class="row" id="update-row" hidden><span class="dot" style="visibility:hidden"></span><span id="update-note" class="value"></span></div>
     <div class="row"><span class="label">配置文件</span><span class="dot" style="visibility:hidden"></span><span id="config-path" class="value muted"></span><button id="file-eye" class="ghost-inline" type="button">👁 查看配置</button></div>
     <pre id="file-view" class="file-view" hidden></pre>
     <div class="row" id="note-row" hidden><span class="dot" style="visibility:hidden"></span><span id="config-note" class="value" style="color:#b07d24"></span></div>
@@ -288,6 +344,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   </p>
 </main>
 <script>
+  var updatePhase = 'idle'; // idle | checking | ready | updating | waiting
+  var pendingVersion = null;
   function setText(id, text) { document.getElementById(id).textContent = text; }
   function setDot(id, state) {
     var el = document.getElementById(id);
@@ -359,6 +417,11 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
     setText('gateway-id', status.gatewayId);
     setText('config-path', status.configPath || '（未用 --config，配置无处落盘）');
+    setText('version', status.version || '—（bundle/开发版安装，不走本机自助升级）');
+    // While a check/update runs, its handlers own the button; render must not stomp it.
+    if (updatePhase === 'idle') {
+      document.getElementById('update-btn').hidden = !status.version;
+    }
     var noteRow = document.getElementById('note-row');
     if (status.configNote) { noteRow.hidden = false; setText('config-note', status.configNote); }
     else { noteRow.hidden = true; }
@@ -454,6 +517,99 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       refresh();
     });
   });
+
+  // self-update flow (release exe installs only)
+  var updateBtn = document.getElementById('update-btn');
+  var updateRow = document.getElementById('update-row');
+  var updateNoteEl = document.getElementById('update-note');
+  function setUpdateNote(text, bad) {
+    updateRow.hidden = !text;
+    updateNoteEl.textContent = text || '';
+    updateNoteEl.style.color = bad ? 'var(--red)' : text ? 'var(--accent)' : '';
+  }
+  updateBtn.addEventListener('click', function () {
+    if (updateBtn.disabled) return;
+    if (updatePhase === 'ready') { doUpdate(); return; }
+    updatePhase = 'checking';
+    updateBtn.disabled = true;
+    updateBtn.textContent = '检查中…';
+    fetch('/api/update-status').then(function (r) { return r.json(); }).then(function (p) {
+      updateBtn.disabled = false;
+      if (p.ok && p.updateAvailable) {
+        updatePhase = 'ready';
+        pendingVersion = p.latest;
+        updateBtn.textContent = '升级到 ' + p.latest;
+        setUpdateNote('发现新版本 ' + p.latest + '（当前 ' + p.version + '）。点按钮开始：约 110MB，校验过后替换。', false);
+      } else if (p.ok) {
+        updatePhase = 'idle';
+        updateBtn.textContent = '检查更新';
+        setUpdateNote('已是最新版本（' + p.latest + '）。', false);
+      } else {
+        updatePhase = 'idle';
+        updateBtn.textContent = '检查更新';
+        setUpdateNote(p.error || '检查失败', true);
+      }
+    }).catch(function (error) {
+      updatePhase = 'idle';
+      updateBtn.disabled = false;
+      updateBtn.textContent = '检查更新';
+      setUpdateNote('检查失败：' + String(error), true);
+    });
+  });
+  function doUpdate() {
+    var want = pendingVersion;
+    pendingVersion = null;
+    updatePhase = 'updating';
+    updateBtn.disabled = true;
+    updateBtn.textContent = '升级中…';
+    setUpdateNote('下载并校验 ' + want + '；替换后 gateway 重启，本页会闪断几秒。', false);
+    fetch('/api/update', { method: 'POST', headers: { 'x-orca-web-admin': '1' } })
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        if (p.ok) {
+          updatePhase = 'waiting';
+          updateBtn.hidden = true;
+          setUpdateNote(p.message || '新版本就位，gateway 正在重启。', false);
+          waitForRestarted(want, 0);
+        } else {
+          updatePhase = 'ready';
+          pendingVersion = want;
+          updateBtn.disabled = false;
+          setUpdateNote('升级失败：' + (p.error || '未知'), true);
+        }
+      })
+      .catch(function (error) {
+        updatePhase = 'ready';
+        pendingVersion = want;
+        updateBtn.disabled = false;
+        setUpdateNote('升级失败：' + String(error), true);
+      });
+  }
+  function waitForRestarted(want, tries) {
+    if (tries > 90) {
+      updatePhase = 'idle';
+      updateBtn.hidden = false;
+      updateBtn.disabled = false;
+      updateBtn.textContent = '检查更新';
+      setUpdateNote('loop 似乎还没拉起新 gateway：等几秒再试，或查 %APPDATA% 的 gateway.log。', true);
+      return;
+    }
+    fetch('/api/status').then(function (r) { return r.json(); }).then(function (p) {
+      if (p.ok && p.status.version === want) {
+        updatePhase = 'idle';
+        updateBtn.hidden = false;
+        updateBtn.disabled = false;
+        updateBtn.textContent = '检查更新';
+        setUpdateNote('已升级到 ' + want + '，连接正在恢复。', false);
+        refresh();
+      } else {
+        setTimeout(function () { waitForRestarted(want, tries + 1); }, 2000);
+      }
+    }).catch(function () {
+      setTimeout(function () { waitForRestarted(want, tries + 1); }, 2000);
+    });
+  }
+
   refresh();
   setInterval(refresh, 3000);
 </script>

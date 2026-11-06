@@ -360,6 +360,7 @@ textarea {
 
 .filters {
   display: flex;
+  align-items: baseline;
   gap: 18px;
   padding: 12px 22px 10px;
   flex: none;
@@ -368,6 +369,31 @@ textarea {
 
 .filters::-webkit-scrollbar {
   display: none;
+}
+
+.board-search {
+  flex: 1;
+  min-width: 32vw;
+  font: 400 13px/1 var(--sans);
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: 2px 0 6px;
+  border-radius: 0;
+}
+
+.board-search::placeholder {
+  color: var(--faint);
+}
+
+.board-search:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
+}
+
+.board-search::-webkit-search-cancel-button {
+  cursor: pointer;
 }
 
 .filters button {

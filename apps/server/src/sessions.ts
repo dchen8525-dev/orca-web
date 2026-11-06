@@ -82,6 +82,12 @@ export class SessionStore {
     this.scheduleSave()
   }
 
+  /** Password rotation: every device must log in again. */
+  clear(): void {
+    this.records.clear()
+    this.scheduleSave()
+  }
+
   sweep(now = Date.now()): void {
     for (const [key, record] of this.records) {
       if (now >= record.expiresAt) {

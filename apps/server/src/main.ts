@@ -1,10 +1,10 @@
 // VPS entry point: HTTP login + static app, WSS for browsers (/client) and the home gateway (/gateway).
 import { createServer, type IncomingMessage } from 'node:http'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { WebSocketServer } from 'ws'
-import { loadServerConfig } from './config.ts'
+import { DEFAULT_CONFIG_PATH, loadServerConfig } from './config.ts'
 import { createRequestHandler, isAuthenticated } from './http-app.ts'
 import { hashPassword } from './passwords.ts'
 import { Hub } from './hub.ts'
@@ -16,9 +16,20 @@ if (args.initConfig) {
   process.exit(0)
 }
 const config = loadServerConfig(args.config)
+const configPath = args.config ?? process.env.ORCA_WEB_SERVER_CONFIG ?? DEFAULT_CONFIG_PATH
 const sessions = new SessionStore(config.sessionTtlMs, config.sessionStorePath)
 const hub = new Hub({ gatewayKey: config.gatewayKey, log })
-const server = createServer(createRequestHandler({ config, sessions, hub, log }))
+const server = createServer(
+  createRequestHandler({
+    config,
+    sessions,
+    hub,
+    log,
+    // The file owner persists the rotated hash; one with no --config (dev) still
+    // verifies the current password but answers 501 instead.
+    applyPasswordHash: (encoded) => persistPasswordHash(configPath, encoded)
+  })
+)
 const wss = new WebSocketServer({ noServer: true })
 
 server.on('upgrade', (request: IncomingMessage, socket, head) => {
@@ -129,4 +140,16 @@ function initConfig(outPath: string, publicOrigin?: string): void {
 
 function log(message: string): void {
   console.log(`${new Date().toISOString()} ${message}`)
+}
+
+function persistPasswordHash(configPath: string, encodedHash: string): void {
+  const file = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>
+  writeJson(configPath, { ...file, passwordHash: encodedHash })
+}
+
+function writeJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true })
+  const temp = `${path}.tmp`
+  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
+  renameSync(temp, path)
 }

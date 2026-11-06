@@ -21,7 +21,7 @@ export type ServerConfig = {
 
 type FileShape = Partial<Omit<ServerConfig, 'sessionTtlMs'>> & { sessionTtlDays?: number }
 
-const DEFAULT_CONFIG_PATH = 'apps/server/config.json'
+export const DEFAULT_CONFIG_PATH = 'apps/server/config.json'
 
 export function loadServerConfig(path?: string): ServerConfig {
   const configPath = path ?? process.env.ORCA_WEB_SERVER_CONFIG ?? DEFAULT_CONFIG_PATH

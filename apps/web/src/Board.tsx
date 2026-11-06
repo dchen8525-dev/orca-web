@@ -59,6 +59,7 @@ export function Board({
   const [initializing, setInitializing] = useState(true)
   const [creatingIn, setCreatingIn] = useState<WorktreeRow | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
   const [folded, setFolded] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const [notifyOn, setNotifyOn] = useState(() => safeGet('orca-notify') === '1')
@@ -222,6 +223,33 @@ export function Board({
   const visible = useMemo(() => {
     // Project numbers stay tied to the unfiltered order, so they do not shuffle per filter.
     const indexed = groups.map((group, index) => ({ ...group, index }))
+    const trimmed = query.trim()
+    if (trimmed) {
+      const q = trimmed.toLowerCase()
+      return indexed
+        .map((group) => {
+          if (group.name.toLowerCase().includes(q)) {
+            return group
+          }
+          return {
+            ...group,
+            worktrees: group.worktrees
+              .map((row) => ({
+                ...row,
+                tasks:
+                  row.branch.toLowerCase().includes(q) || row.label.toLowerCase().includes(q)
+                    ? row.tasks
+                    : row.tasks.filter(
+                        (task) =>
+                          task.title.toLowerCase().includes(q) ||
+                          task.detail.toLowerCase().includes(q)
+                      )
+              }))
+              .filter((row) => row.tasks.length > 0)
+          }
+        })
+        .filter((group) => group.worktrees.length > 0)
+    }
     if (filter === 'all') {
       return indexed
     }
@@ -233,7 +261,7 @@ export function Board({
           .filter((row) => row.tasks.length > 0)
       }))
       .filter((group) => group.worktrees.length > 0)
-  }, [groups, filter])
+  }, [groups, filter, query])
 
   const agentCandidates = useMemo(() => {
     const seen = new Set(['claude', 'codex'])
@@ -334,6 +362,14 @@ export function Board({
       <div className="rule double mast-rule" />
 
       <nav className="filters">
+        <input
+          className="board-search"
+          type="search"
+          inputMode="search"
+          placeholder="搜标题、分支或项目名"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
         {FILTERS.map((entry) => (
           <button
             key={entry.key}
@@ -480,7 +516,9 @@ export function Board({
         })}
 
         {status.gatewayConnected && worktrees.length > 0 && visible.length === 0 ? (
-          <p className="empty">这一栏暂时是空的。</p>
+          <p className="empty">
+            {query.trim() ? `没有匹配「${query.trim()}」的任务。` : '这一栏暂时是空的。'}
+          </p>
         ) : null}
         {!initializing && status.gatewayConnected && worktrees.length === 0 ? (
           <p className="empty">没有工作区</p>

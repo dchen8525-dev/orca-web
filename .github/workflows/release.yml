@@ -33,10 +33,11 @@ jobs:
           cp -r apps/web/dist payload/web/
           tar -czf orca-web-release.tar.gz -C payload .
       # Self-contained binaries: embed the runtime so neither the VPS nor the
-      # home Windows machine needs Node, ws and node:crypto included.
+      # home Windows machine needs Node, ws and node:crypto included. The gateway
+      # bakes in the tag so its admin page can run the self-update flow.
       - name: Compile the standalone binaries
         run: |
-          bun build --compile apps/gateway/src/main.ts --target=bun-windows-x64 --outfile orca-gateway-windows-x64.exe
+          bun build --compile apps/gateway/src/main.ts --target=bun-windows-x64 --define ORCA_BUILD_VERSION='"'"$GITHUB_REF_NAME"'"' --outfile orca-gateway-windows-x64.exe
           bun build --compile apps/server/src/main.ts --target=bun-linux-x64 --outfile orca-server-linux-x64
       - name: Package the Linux deb
         run: |

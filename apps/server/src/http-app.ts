@@ -1,9 +1,9 @@
-// HTTP surface: login/logout/session/health plus the built web app.
+// HTTP surface: login/logout/session/password/health plus the built web app.
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ServerConfig } from './config.ts'
-import { verifyPassword } from './passwords.ts'
+import { hashPassword, verifyPassword } from './passwords.ts'
 import {
   SESSION_COOKIE,
   clearedSessionCookie,
@@ -16,6 +16,21 @@ import type { Hub } from './hub.ts'
 const MAX_LOGIN_BODY_BYTES = 4 * 1024
 const LOGIN_WINDOW_MS = 15 * 60_000
 const LOGIN_MAX_FAILURES = 10
+const MIN_PASSWORD_LENGTH = 8
+
+// React writes style attributes and self-hosts everything else; wss to the serving
+// origin is covered by 'self'.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  'img-src self data:',
+  "connect-src 'self'",
+  "font-src 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'"
+].join('; ')
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -33,6 +48,8 @@ export type RequestHandlerOptions = {
   sessions: SessionStore
   hub: Hub
   log: (message: string) => void
+  /** Persists the rotated password hash into the config file (owned in main.ts). */
+  applyPasswordHash?: (encodedHash: string) => void
 }
 
 export function createRequestHandler(options: RequestHandlerOptions): (
@@ -115,6 +132,43 @@ export function createRequestHandler(options: RequestHandlerOptions): (
       }
       response.setHeader('Set-Cookie', clearedSessionCookie({ secure: config.cookieSecure }))
       return json(response, 200, { ok: true })
+    }
+
+    if (url.pathname === '/api/password' && request.method === 'POST') {
+      const token = readCookie(request.headers.cookie, SESSION_COOKIE)
+      if (!token || !isAuthenticated(request, sessions)) {
+        return json(response, 401, { ok: false, error: 'unauthenticated' })
+      }
+      if (!options.applyPasswordHash) {
+        return json(response, 501, { ok: false, error: 'password_change_unsupported' })
+      }
+      return readJsonBody(request, (body) => {
+        const currentPassword = typeof body.current === 'string' ? body.current : ''
+        const newPassword = typeof body.new === 'string' ? body.new : ''
+        if (!currentPassword || !verifyPassword(currentPassword, config.passwordHash)) {
+          return json(response, 401, { ok: false, error: 'invalid_credentials' })
+        }
+        if (newPassword.length < MIN_PASSWORD_LENGTH) {
+          return json(response, 400, { ok: false, error: 'new_password_too_short' })
+        }
+        const encoded = hashPassword(newPassword)
+        try {
+          options.applyPasswordHash!(encoded)
+        } catch (error) {
+          options.log(`password change failed: ${(error as Error).message}`)
+          return json(response, 500, { ok: false, error: 'persist_failed' })
+        }
+        // In-memory and on disk agree now; retire every session, keep the caller's.
+        config.passwordHash = encoded
+        sessions.clear()
+        const fresh = sessions.create()
+        response.setHeader(
+          'Set-Cookie',
+          sessionCookie(fresh.token, { secure: config.cookieSecure, ttlMs: config.sessionTtlMs })
+        )
+        options.log('password changed')
+        return json(response, 200, { ok: true })
+      })
     }
 
     if (url.pathname.startsWith('/api/')) {
@@ -238,6 +292,7 @@ function clientIp(request: IncomingMessage, trustProxy: boolean): string {
 function setSecurityHeaders(response: ServerResponse): void {
   response.setHeader('x-content-type-options', 'nosniff')
   response.setHeader('referrer-policy', 'no-referrer')
+  response.setHeader('content-security-policy', CONTENT_SECURITY_POLICY)
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
