@@ -85,9 +85,6 @@ export function Board({
 
   const load = useCallback(
     async (quiet = false) => {
-      if (!quiet) {
-        setLoading(true)
-      }
       try {
         const [projectList, ps] = await Promise.all([
           hub.request<{ projects: Project[] }>('project.list', {}),
