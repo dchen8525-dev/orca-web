@@ -24,5 +24,12 @@ export const api = {
 
   async logout(): Promise<void> {
     await post('/api/logout', {})
+  },
+
+  /** Rotates the login password; every other session dies, this one is re-issued. */
+  async changePassword(current: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
+    const response = await post('/api/password', { current, new: newPassword })
+    const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+    return { ok: response.ok && payload.ok !== false, error: payload.error }
   }
 }

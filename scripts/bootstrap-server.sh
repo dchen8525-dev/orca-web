@@ -10,14 +10,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 REPO="${ORCA_WEB_REPO:-https://github.com/dchen8525-dev/orca-web}"
-DEB_URL="$REPO/releases/latest/download/orca-server-linux-amd64.deb"
 
+# Pinning an exact tag (third arg) avoids the latest/download redirect cache, which
+# briefly serves stale bytes right after a release is (re)published.
 REMOTE=0
 TARGET=""
+TAG="${ORCA_WEB_TAG:-latest}"
 if [ "${1:-}" = "--remote" ]; then
   REMOTE=1
   TARGET="${ORCA_WEB_SSH:-orca-web}"
   DOMAIN="${2:-}"
+  [ -n "${3:-}" ] && TAG="$3"
 elif [ -n "${1:-}" ]; then
   TARGET="$1"
   DOMAIN="${2:-}"
@@ -26,6 +29,11 @@ else
   read -rp "域名（如 144-34-186-164.sslip.io）: " DOMAIN
 fi
 [ -n "$DOMAIN" ] || { echo "域名必需：bootstrap-server.sh [--remote] <ssh-target> <domain>"; exit 1; }
+if [ "$TAG" = "latest" ]; then
+  DEB_URL="$REPO/releases/latest/download/orca-server-linux-amd64.deb"
+else
+  DEB_URL="$REPO/releases/download/$TAG/orca-server-linux-amd64.deb"
+fi
 
 # ---------- payload: local build ----------
 if [ "$REMOTE" = 0 ]; then

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { HubClient, HubStatus } from './hub'
+import { ChangePassword } from './ChangePassword'
 import { CreateTask } from './CreateTask'
 import {
   sessionIdFromPaneKey,
@@ -58,6 +59,7 @@ export function Board({
   const [error, setError] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(true)
   const [creatingIn, setCreatingIn] = useState<WorktreeRow | null>(null)
+  const [changingPassword, setChangingPassword] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
   const [folded, setFolded] = useState<Set<string>>(new Set())
@@ -348,6 +350,7 @@ export function Board({
               {notifyOn ? '提醒 ✓' : '提醒'}
             </button>
             <button onClick={onOpenAutomations}>定时</button>
+            <button onClick={() => setChangingPassword(true)}>密码</button>
             <button onClick={() => void onSignOut()}>退出</button>
           </div>
         </div>
@@ -537,6 +540,8 @@ export function Board({
           }}
         />
       ) : null}
+
+      {changingPassword ? <ChangePassword onClose={() => setChangingPassword(false)} /> : null}
     </div>
   )
 }
