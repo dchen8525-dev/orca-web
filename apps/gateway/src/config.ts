@@ -45,10 +45,10 @@ export function loadConfig(options: { configPath?: string; localOrca?: boolean }
 // The admin page edits the file; env vars already present at startup would shadow it on restart.
 export function describeConfigSource(config: GatewayConfig): string | null {
   if (config.pairedVia === 'local-orca') {
-    return '本轮从桌面 Orca 的本地配对材料读取；写入的配对信息要生效，启动命令需去掉 --local-orca。'
+    return 'gateway 以 --local-orca 启动：本页写入的配对信息不会生效。去掉该参数重启即可。'
   }
   if (process.env.ORCA_WEB_SERVER_URL || process.env.ORCA_WEB_GATEWAY_KEY) {
-    return '当前进程带 ORCA_WEB_* 环境变量，环境变量优先于配置文件；建议用启动脚本的 --config 方式运行。'
+    return 'ORCA_WEB_* 环境变量优先于配置文件：本页改动会被覆盖。去掉环境变量重启即可。'
   }
   return null
 }
