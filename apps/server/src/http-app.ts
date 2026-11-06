@@ -23,7 +23,7 @@ const MIN_PASSWORD_LENGTH = 8
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  'img-src self data:',
+  "img-src 'self' data:",
   "connect-src 'self'",
   "font-src 'self'",
   "frame-ancestors 'none'",
