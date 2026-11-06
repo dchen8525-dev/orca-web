@@ -247,7 +247,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     </div>
     <div class="row"><span class="label">状态</span><span id="hub-dot" class="dot"></span><span id="hub-value" class="value muted">读状态中…</span></div>
     <div class="row"><span class="label">服务器</span><span class="dot" style="visibility:hidden"></span><span id="hub-url" class="value mono">—</span></div>
-    <div class="row"><span class="label">gateway key</span><span class="dot" style="visibility:hidden"></span><span id="hub-key" class="value mono">••••••••••</span><button id="key-eye" class="ghost-inline" type="button">👁 显示</button></div>
     <div id="hub-form" hidden>
       <p class="form-note">换服务器或换 key。地址 + key 两样都填才会全部替换；只填一个就只改一个。保存后立刻重拨。</p>
       <input id="server-url" placeholder="wss://服务器域名/gateway" autocomplete="off" />
@@ -265,8 +264,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     </div>
     <div class="row"><span class="label">配对状态</span><span id="pair-dot" class="dot" style="visibility:hidden"></span><span id="pair-state" class="value muted">读状态中…</span></div>
     <div class="row"><span class="label">Orca 连接</span><span class="dot" style="visibility:hidden"></span><span id="orca-value" class="value muted">读状态中…</span></div>
-    <div class="row"><span class="label">配对写入</span><span class="dot" style="visibility:hidden"></span><span id="pair-via" class="value muted">—</span><button id="file-eye" class="ghost-inline" type="button">👁 查看配置</button></div>
-    <pre id="file-view" class="file-view" hidden></pre>
     <div id="pair-form" hidden>
       <p class="form-note">粘贴新配对码 = <b>替换现有配对</b>。旧设备可在桌面 Orca 的设置里撤销；正常在用就不需要重新配对。</p>
       <textarea id="pairing-code" placeholder="orca://pair?code=……（桌面 Orca 设置 → 手机配对 生成，整段粘贴）"></textarea>
@@ -278,7 +275,8 @@ const ADMIN_PAGE_HTML = `<!doctype html>
 
   <section class="card">
     <div class="row"><span class="label">网关 id</span><span class="dot" style="visibility:hidden"></span><span id="gateway-id" class="value muted"></span></div>
-    <div class="row"><span class="label">配置文件</span><span class="dot" style="visibility:hidden"></span><span id="config-path" class="value muted"></span></div>
+    <div class="row"><span class="label">配置文件</span><span class="dot" style="visibility:hidden"></span><span id="config-path" class="value muted"></span><button id="file-eye" class="ghost-inline" type="button">👁 查看配置</button></div>
+    <pre id="file-view" class="file-view" hidden></pre>
     <div class="row" id="note-row" hidden><span class="label">补充</span><span class="dot" style="visibility:hidden"></span><span id="config-note" class="value" style="color:#b07d24"></span></div>
   </section>
 
@@ -288,7 +286,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
   </p>
 </main>
 <script>
-  var keyShown = false;
   function setText(id, text) { document.getElementById(id).textContent = text; }
   function setDot(id, state) {
     var el = document.getElementById(id);
@@ -333,9 +330,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     setDot('hub-dot', hub ? 'on' : 'off');
     setText('hub-value', hub ? '正常，和服务器保持在线' : '在后台自动重拨，隔几秒自动变');
     setText('hub-url', status.hubUrl || '—');
-    var keyMask = '•'.repeat(Math.max(8, Math.min((status.hubKey || '').length, 24)));
-    setText('hub-key', keyShown ? (status.hubKey || '—') : keyMask);
-    setText('key-eye', keyShown ? '🙈 隐藏' : '👁 显示');
 
     // group: gateway ↔ orca
     var version = desc.appVersion ? 'Orca ' + desc.appVersion : null;
@@ -360,7 +354,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     }
     setText('orca-value', orcaIdent || '还没有读到 Orca 的信息');
     setText('orca-value', orcaIdent || '还没有读到 Orca 的信息');
-    setText('pair-via', status.pairedVia === 'local-orca' ? '本地配对材料' : '配置文件（gateway.json）');
 
     setText('gateway-id', status.gatewayId);
     setText('config-path', status.configPath || '（未用 --config，配置无处落盘）');
@@ -402,10 +395,6 @@ const ADMIN_PAGE_HTML = `<!doctype html>
       noteEl.textContent = String(error);
     });
   }
-  document.getElementById('key-eye').addEventListener('click', function () {
-    keyShown = !keyShown;
-    refresh();
-  });
   document.getElementById('file-eye').addEventListener('click', function () {
     var view = document.getElementById('file-view');
     if (view.hidden) {
