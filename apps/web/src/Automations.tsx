@@ -45,6 +45,7 @@ export function Automations({
   const [busyId, setBusyId] = useState<string | null>(null)
   const busyRef = useRef<string | null>(null)
   const [runsFor, setRunsFor] = useState<string | null>(null)
+  const [outputFor, setOutputFor] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
   const [runs, setRuns] = useState<AutomationRun[]>([])
   const [editor, setEditor] = useState<Automation | null | undefined>(undefined)
@@ -89,6 +90,7 @@ export function Automations({
       await load()
       if (remove) {
         setRunsFor(null)
+        setOutputFor(null)
         setConfirming(null)
       } else if (runsFor === id) {
         // The automation may vanish between click and refetch; its history is then gone too.
@@ -114,6 +116,7 @@ export function Automations({
     }
     if (runsFor === id) {
       setRunsFor(null)
+      setOutputFor(null)
       return
     }
     busyRef.current = id
@@ -255,24 +258,31 @@ export function Automations({
                 {runs.length === 0 ? <p className="muted small">还没有运行记录。</p> : null}
                 {runs.map((run) => {
                   const linked = canOpenRun(run)
-                  const body = (
-                    <>
-                      <span className="run-status">{runStatus(run)}</span>
-                      <span className="run-title">
-                        {fmtStamp(run.scheduledFor, null)}
-                        {run.trigger === 'manual' ? ' · 手动' : ''}
-                        {run.error ? ` · ${run.error}` : ''}
-                      </span>
-                      <span className="run-open">{linked ? '查看 ›' : ''}</span>
-                    </>
-                  )
-                  return linked ? (
-                    <button className="run-row" key={run.id} onClick={() => openRun(run)}>
-                      {body}
-                    </button>
-                  ) : (
-                    <div className="run-row" key={run.id}>
-                      {body}
+                  const output = run.outputSnapshot?.content ?? ''
+                  const open = outputFor === run.id
+                  const action = linked ? '会话 ›' : output ? (open ? '收起' : '输出 ›') : ''
+                  return (
+                    <div key={run.id}>
+                      <button
+                        className="run-row"
+                        onClick={() => {
+                          if (linked) {
+                            openRun(run)
+                          } else if (output) {
+                            setOutputFor(open ? null : run.id)
+                          }
+                        }}
+                        disabled={!linked && !output}
+                      >
+                        <span className="run-status">{runStatus(run)}</span>
+                        <span className="run-title">
+                          {fmtStamp(run.scheduledFor, null)}
+                          {run.trigger === 'manual' ? ' · 手动' : ''}
+                          {run.error ? ` · ${run.error}` : ''}
+                        </span>
+                        <span className="run-open">{action}</span>
+                      </button>
+                      {open ? <RunOutput run={run} /> : null}
                     </div>
                   )
                 })}
@@ -565,6 +575,35 @@ function AutomationEditor({
     </div>
   )
 }
+
+function RunOutput({ run }: { run: AutomationRun }) {
+  const snapshot = run.outputSnapshot
+  if (!snapshot) {
+    return null
+  }
+  // Terminals wrap hard at their own column width; a plain surface scrolls instead.
+  const [expanded, setExpanded] = useState(false)
+  const lines = snapshot.content.split('\n')
+  const clipped = !expanded && lines.length > LONG_OUTPUT_LINES
+  return (
+    <div className="run-output">
+      <pre className="run-output-text">{clipped ? lines.slice(0, LONG_OUTPUT_LINES).join('\n') : snapshot.content}</pre>
+      {clipped || expanded ? (
+        <button className="run-output-more" onClick={() => setExpanded((value) => !value)}>
+          {clipped
+            ? `展开其余 ${lines.length - LONG_OUTPUT_LINES} 行`
+            : '收起'}
+        </button>
+      ) : null}
+      <p className="run-output-meta">
+        {snapshot.truncated ? 'Orca 只保留了末尾部分输出 · ' : ''}
+        记录于 {fmtStamp(snapshot.capturedAt, null)}
+      </p>
+    </div>
+  )
+}
+
+const LONG_OUTPUT_LINES = 40
 
 function isTuiLike(name: string): boolean {
   return /^[a-z][a-z0-9-]*$/.test(name)

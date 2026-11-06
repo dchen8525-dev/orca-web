@@ -132,6 +132,14 @@ export type Automation = {
   updatedAt?: number
 }
 
+/** Orca captures the run's terminal text on completion; it outlives the pane. */
+export type AutomationRunOutputSnapshot = {
+  format: 'plain_text'
+  content: string
+  capturedAt: number
+  truncated: boolean
+}
+
 export type AutomationRun = {
   id: string
   automationId: string
@@ -140,6 +148,7 @@ export type AutomationRun = {
   scheduledFor: number
   status: string
   trigger: 'scheduled' | 'manual'
+  outputSnapshot?: AutomationRunOutputSnapshot | null
   workspaceDisplayName?: string | null
   chatSessionId?: string | null
   terminalPaneKey?: string | null
