@@ -66,9 +66,22 @@ export function createRequestHandler(options: RequestHandlerOptions): (
     if (url.pathname === '/api/session') {
       const token = readCookie(request.headers.cookie, SESSION_COOKIE)
       const session = token ? sessions.touch(token) : null
+      let expiresAt = session?.expiresAt
+      // The cookie's Max-Age is fixed at login while the store rolls; past half the
+      // window, reissue so daily use never hits the login wall.
+      if (session && token && Date.now() - session.createdAt > config.sessionTtlMs / 2) {
+        const reissued = sessions.refresh(token)
+        if (reissued) {
+          expiresAt = reissued.expiresAt
+          response.setHeader(
+            'Set-Cookie',
+            sessionCookie(token, { secure: config.cookieSecure, ttlMs: config.sessionTtlMs })
+          )
+        }
+      }
       return json(response, 200, {
         authenticated: session !== null,
-        ...(session ? { expiresAt: session.expiresAt } : {})
+        ...(expiresAt ? { expiresAt } : {})
       })
     }
 

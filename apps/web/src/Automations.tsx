@@ -74,8 +74,20 @@ export function Automations({
   useEffect(() => {
     if (connected) {
       void load()
+      // The list loads once and the runs' dispatch→done lifecycle is never pushed,
+      // so a slow tick is the only way the rows stay honest.
+      const timer = setInterval(() => void load(), 60_000)
+      return () => clearInterval(timer)
     }
+    return undefined
   }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    document.title = '定时 · orca'
+    return () => {
+      document.title = 'orca'
+    }
+  }, [])
 
   const mutate = async (id: string, action: () => Promise<unknown>, remove = false) => {
     // A double tap must not start two runs; busyId only paints the button.
@@ -135,7 +147,6 @@ export function Automations({
   const openRun = (run: AutomationRun) => {
     const sessionId = runSessionId(run)
     if (sessionId) {
-      onBack()
       onOpenTask(sessionId, run.title)
     }
   }

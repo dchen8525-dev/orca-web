@@ -595,6 +595,15 @@ textarea {
   opacity: 0.6;
 }
 
+.orca-note {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(176, 125, 36, 0.45);
+  background: rgba(176, 125, 36, 0.08);
+  font: 500 12px/1.5 var(--sans);
+  color: #b07d24;
+}
+
 .pull-pill {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 12px);

@@ -58,6 +58,25 @@ export class SessionStore {
     return record
   }
 
+  /** Re-anchor the rolling window; the browser cookie then needs a matching Max-Age. */
+  refresh(token: string): SessionRecord | null {
+    const key = keyOf(token)
+    const record = this.records.get(key)
+    if (!record) {
+      return null
+    }
+    const now = Date.now()
+    if (now >= record.expiresAt) {
+      this.records.delete(key)
+      return null
+    }
+    record.createdAt = now
+    record.lastSeenAt = now
+    record.expiresAt = now + this.ttlMs
+    this.scheduleSave()
+    return record
+  }
+
   destroy(token: string): void {
     this.records.delete(keyOf(token))
     this.scheduleSave()

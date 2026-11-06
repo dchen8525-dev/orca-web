@@ -61,6 +61,7 @@ export function Board({
   const [filter, setFilter] = useState<Filter>('all')
   const [folded, setFolded] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
+  const [notifyOn, setNotifyOn] = useState(() => safeGet('orca-notify') === '1')
   const pull = useRef<{ startY: number; armed: boolean } | null>(null)
 
   // relativeTime only recomputes on re-render; a slow tick keeps it honest between events.
@@ -205,6 +206,15 @@ export function Board({
     return [...grouped].map(([name, rows]) => ({ name, worktrees: rows }))
   }, [projects, worktrees, projections])
 
+  const attentionTasks = useMemo(
+    () =>
+      groups
+        .flatMap((group) => group.worktrees.flatMap((row) => row.tasks))
+        .filter((task) => task.state === 'attention')
+        .map((task) => ({ key: task.key, title: task.title })),
+    [groups]
+  )
+
   const counts = useMemo(() => {
     const all = groups.flatMap((group) => group.worktrees.flatMap((row) => row.tasks))
     return {
@@ -242,6 +252,59 @@ export function Board({
     return [...seen]
   }, [worktrees])
 
+  // Per-task transition detection, not per-count: two tasks resolving while a third
+  // appears must still be noticed.
+  const seenAttention = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const next = new Set(attentionTasks.map((task) => task.key))
+    const previous = seenAttention.current
+    seenAttention.current = next
+    if (!previous || !notifyOn || !document.hidden) {
+      return
+    }
+    const fresh = attentionTasks.filter((task) => !previous.has(task.key))
+    if (fresh.length === 0) {
+      return
+    }
+    const body =
+      fresh.length > 1 ? `${fresh[0]!.title} 等 ${fresh.length} 个任务` : fresh[0]!.title
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        new Notification('任务在等你确认', { body, tag: 'orca-attention' })
+      } catch {
+        // Notification constructors throw on some WebViews; vibrating still matters.
+      }
+    }
+    navigator.vibrate?.(40)
+  }, [attentionTasks, notifyOn])
+
+  const toggleNotify = useCallback(async () => {
+    if (notifyOn) {
+      try {
+        localStorage.removeItem('orca-notify')
+      } catch {}
+      setNotifyOn(false)
+      return
+    }
+    if (typeof Notification === 'undefined') {
+      // No Notification API (old iOS Safari): vibration alone is still useful.
+      setNotifyOn(true)
+      try {
+        localStorage.setItem('orca-notify', '1')
+      } catch {}
+      return
+    }
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission === 'granted') {
+        localStorage.setItem('orca-notify', '1')
+        setNotifyOn(true)
+      }
+    } catch {
+      // Denied browsers reject here; staying off is the correct outcome.
+    }
+  }, [notifyOn])
+
   const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
 
   return (
@@ -258,6 +321,9 @@ export function Board({
             进行中的<em>工作</em>
           </h1>
           <div className="mast-actions">
+            <button onClick={() => void toggleNotify()} aria-pressed={notifyOn}>
+              {notifyOn ? '提醒 ✓' : '提醒'}
+            </button>
             <button onClick={onOpenAutomations}>定时</button>
             <button onClick={() => void load(false)} disabled={!status.gatewayConnected || loading}>
               刷新
@@ -268,6 +334,9 @@ export function Board({
         <p className="dek">
           {counts.working} 个任务正在跑，{counts.attention} 个等你回话。
         </p>
+        {status.gatewayConnected && orcaNote(status.orcaState) ? (
+          <p className="orca-note">{`家里 Orca ${orcaNote(status.orcaState)}，下面是最后已知状态`}</p>
+        ) : null}
       </header>
 
       <div className="rule double mast-rule" />
@@ -450,6 +519,25 @@ function markForState(state: string): string {
     return '!'
   }
   return '·'
+}
+
+function orcaNote(orcaState: string | null): string | null {
+  switch (orcaState) {
+    case 'connected':
+      return null
+    case 'connecting':
+      return '正在连接'
+    default:
+      return '已断开'
+  }
+}
+
+function safeGet(item: string): string | null {
+  try {
+    return localStorage.getItem(item)
+  } catch {
+    return null
+  }
 }
 
 function summaryFor(group: {

@@ -73,6 +73,13 @@ export function TaskView({
     [hub, sessionId]
   )
   const scrollRef = useRef<HTMLDivElement>(null)
+  // The tab strip / app switcher should name the task, not say "orca" five times.
+  useEffect(() => {
+    document.title = `${liveTitle ?? title} · orca`
+    return () => {
+      document.title = 'orca'
+    }
+  }, [liveTitle, title])
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Older pages must survive live refetches, so the tail grows as they are loaded.
   const olderCount = useRef(0)
