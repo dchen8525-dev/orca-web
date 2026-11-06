@@ -11,6 +11,7 @@ import type {
   HistoryResult,
   PromptQuestion,
   QuestionBody,
+  StatusEvent,
   ToolCallBody
 } from './types'
 
@@ -53,6 +54,24 @@ export function TaskView({
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [optionBusyKey, setOptionBusyKey] = useState<string | null>(null)
   const [optionError, setOptionError] = useState<string | null>(null)
+  // Deep links arrive without a board-supplied title; the status stream carries the name.
+  const [liveTitle, setLiveTitle] = useState<string | null>(null)
+  useEffect(
+    () =>
+      hub.subscribe('agentSession.subscribeStatus', {}, (event) => {
+        if (event.kind !== 'frame') {
+          return
+        }
+        const frame = event.result as StatusEvent
+        const sessions =
+          frame.type === 'snapshot' ? frame.sessions : frame.type === 'status' ? [frame.session] : []
+        const match = sessions.find((session) => session.sessionId === sessionId)
+        if (match?.conversationName) {
+          setLiveTitle(match.conversationName)
+        }
+      }),
+    [hub, sessionId]
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Older pages must survive live refetches, so the tail grows as they are loaded.
@@ -385,7 +404,7 @@ export function TaskView({
 
       <div className="article-head">
         <div className="eyebrow">{`${agent ?? 'agent'} 的工作记录`}</div>
-        <h1>{title}</h1>
+        <h1>{liveTitle ?? title}</h1>
         <div className="byline">
           <span className={`pill${tone === 'green' ? ' pill-green' : tone === 'amber' ? ' pill-amber' : ''}`}>
             {running ? <i className="spin" aria-hidden="true" /> : null}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { HubClient, HubStatus } from './hub'
 import { CreateTask } from './CreateTask'
 import {
@@ -60,6 +60,15 @@ export function Board({
   const [creatingIn, setCreatingIn] = useState<WorktreeRow | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [folded, setFolded] = useState<Set<string>>(new Set())
+  const [refreshing, setRefreshing] = useState(false)
+  const pull = useRef<{ startY: number; armed: boolean } | null>(null)
+
+  // relativeTime only recomputes on re-render; a slow tick keeps it honest between events.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setTick((value) => value + 1), 30_000)
+    return () => clearInterval(timer)
+  }, [])
 
   const toggleFolded = useCallback((name: string) => {
     setFolded((previous) => {
@@ -237,6 +246,7 @@ export function Board({
 
   return (
     <div className="app">
+      {refreshing ? <div className="pull-pill">刷新中…</div> : null}
       <header className="masthead">
         <div className="kicker">
           <span className={`dot dot-${connectionTone(status)}`} />
@@ -276,7 +286,29 @@ export function Board({
         ))}
       </nav>
 
-      <main className="board">
+      <main
+        className="board"
+        onTouchStart={(event) => {
+          pull.current =
+            event.currentTarget.scrollTop <= 0
+              ? { startY: event.touches[0].clientY, armed: false }
+              : null
+        }}
+        onTouchMove={(event) => {
+          const active = pull.current
+          if (!active || active.armed || refreshing) {
+            return
+          }
+          if (event.touches[0].clientY - active.startY > 90) {
+            active.armed = true
+            setRefreshing(true)
+            load(true).finally(() => setRefreshing(false))
+          }
+        }}
+        onTouchEnd={() => {
+          pull.current = null
+        }}
+      >
         {!status.gatewayConnected ? (
           <p className="empty">家里电脑的 gateway 未连接。Orca 是否还开着？</p>
         ) : null}

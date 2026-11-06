@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, type SessionInfo } from './api'
 import { HubClient, type HubStatus } from './hub'
 import { Board } from './Board'
@@ -10,6 +10,21 @@ type Route =
   | { kind: 'board' }
   | { kind: 'task'; sessionId: string; title: string; agent?: string }
   | { kind: 'automations' }
+
+function pathFor(route: Route): string {
+  if (route.kind === 'task') {
+    return `/task/${encodeURIComponent(route.sessionId)}`
+  }
+  return route.kind === 'automations' ? '/automations' : '/'
+}
+
+function routeFromPath(path: string): Route {
+  const match = /^\/task\/([^/]+)/.exec(path)
+  if (match) {
+    return { kind: 'task', sessionId: decodeURIComponent(match[1]!), title: '任务' }
+  }
+  return path === '/automations' ? { kind: 'automations' } : { kind: 'board' }
+}
 
 export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -40,7 +55,7 @@ function Main({ onSignedOut }: { onSignedOut: () => void }) {
     gatewayConnected: false,
     orcaState: null
   })
-  const [route, setRoute] = useState<Route>({ kind: 'board' })
+  const [route, setRoute] = useState<Route>(() => routeFromPath(location.pathname))
 
   useEffect(() => {
     hub.connect()
@@ -56,6 +71,28 @@ function Main({ onSignedOut }: { onSignedOut: () => void }) {
     }
   }, [status.authExpired, hub, onSignedOut])
 
+  useEffect(() => {
+    const onPop = () => setRoute(routeFromPath(location.pathname))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  const navigate = useCallback((next: Route) => {
+    history.pushState({ orcaWeb: true }, '', pathFor(next))
+    setRoute(next)
+  }, [])
+
+  // history.back() leaves the site if this page was opened directly on a deep link,
+  // so plant a board entry first in that case.
+  const goBack = useCallback(() => {
+    if (history.state?.orcaWeb) {
+      history.back()
+      return
+    }
+    setRoute({ kind: 'board' })
+    history.replaceState({ orcaWeb: true }, '', pathFor({ kind: 'board' }))
+  }, [])
+
   if (route.kind === 'task') {
     return (
       <TaskView
@@ -64,7 +101,7 @@ function Main({ onSignedOut }: { onSignedOut: () => void }) {
         title={route.title}
         agent={route.agent}
         status={status}
-        onBack={() => setRoute({ kind: 'board' })}
+        onBack={goBack}
       />
     )
   }
@@ -73,8 +110,8 @@ function Main({ onSignedOut }: { onSignedOut: () => void }) {
       <Automations
         hub={hub}
         connected={status.gatewayConnected}
-        onBack={() => setRoute({ kind: 'board' })}
-        onOpenTask={(sessionId, title) => setRoute({ kind: 'task', sessionId, title })}
+        onBack={goBack}
+        onOpenTask={(sessionId, title) => navigate({ kind: 'task', sessionId, title })}
       />
     )
   }
@@ -83,8 +120,8 @@ function Main({ onSignedOut }: { onSignedOut: () => void }) {
     <Board
       hub={hub}
       status={status}
-      onOpenTask={(task) => setRoute({ kind: 'task', ...task })}
-      onOpenAutomations={() => setRoute({ kind: 'automations' })}
+      onOpenTask={(task) => navigate({ kind: 'task', ...task })}
+      onOpenAutomations={() => navigate({ kind: 'automations' })}
       onSignOut={async () => {
         hub.close()
         await api.logout()
