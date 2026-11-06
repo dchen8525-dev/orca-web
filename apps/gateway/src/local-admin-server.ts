@@ -277,7 +277,7 @@ const ADMIN_PAGE_HTML = `<!doctype html>
     <div class="row"><span class="label">网关 id</span><span class="dot" style="visibility:hidden"></span><span id="gateway-id" class="value muted"></span></div>
     <div class="row"><span class="label">配置文件</span><span class="dot" style="visibility:hidden"></span><span id="config-path" class="value muted"></span><button id="file-eye" class="ghost-inline" type="button">👁 查看配置</button></div>
     <pre id="file-view" class="file-view" hidden></pre>
-    <div class="row" id="note-row" hidden><span class="label">配置来源</span><span class="dot" style="visibility:hidden"></span><span id="config-note" class="value" style="color:#b07d24"></span></div>
+    <div class="row" id="note-row" hidden><span class="dot" style="visibility:hidden"></span><span id="config-note" class="value" style="color:#b07d24"></span></div>
   </section>
 
   <p class="hint">
