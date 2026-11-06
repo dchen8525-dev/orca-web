@@ -116,6 +116,36 @@ export type HistoryPage = {
 
 export type HistoryResult = { ok: boolean; page: HistoryPage; reset?: string }
 
+export type Automation = {
+  id: string
+  name: string
+  prompt: string
+  agentId: string
+  workspaceMode: 'existing' | 'new_per_run'
+  workspaceId?: string | null
+  timezone?: string | null
+  rrule: string
+  dtstart: number
+  enabled: boolean
+  nextRunAt?: number | null
+  missedRunGraceMinutes?: number
+  updatedAt?: number
+}
+
+export type AutomationRun = {
+  id: string
+  automationId: string
+  runNumber: number
+  title: string
+  scheduledFor: number
+  status: string
+  trigger: 'scheduled' | 'manual'
+  workspaceDisplayName?: string | null
+  chatSessionId?: string | null
+  terminalPaneKey?: string | null
+  error?: string | null
+}
+
 export type AgentSessionModelOption = {
   id: string
   label?: string

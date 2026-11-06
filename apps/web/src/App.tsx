@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, type SessionInfo } from './api'
 import { HubClient, type HubStatus } from './hub'
 import { Board } from './Board'
+import { Automations } from './Automations'
 import { Login } from './Login'
 import { TaskView } from './TaskView'
 
 type Route =
   | { kind: 'board' }
   | { kind: 'task'; sessionId: string; title: string; agent?: string }
+  | { kind: 'automations' }
 
 export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -66,12 +68,23 @@ function Main({ onSignedOut }: { onSignedOut: () => void }) {
       />
     )
   }
+  if (route.kind === 'automations') {
+    return (
+      <Automations
+        hub={hub}
+        connected={status.gatewayConnected}
+        onBack={() => setRoute({ kind: 'board' })}
+        onOpenTask={(sessionId, title) => setRoute({ kind: 'task', sessionId, title })}
+      />
+    )
+  }
 
   return (
     <Board
       hub={hub}
       status={status}
       onOpenTask={(task) => setRoute({ kind: 'task', ...task })}
+      onOpenAutomations={() => setRoute({ kind: 'automations' })}
       onSignOut={async () => {
         hub.close()
         await api.logout()

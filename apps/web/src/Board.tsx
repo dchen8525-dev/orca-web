@@ -43,11 +43,13 @@ export function Board({
   hub,
   status,
   onOpenTask,
+  onOpenAutomations,
   onSignOut
 }: {
   hub: HubClient
   status: HubStatus
   onOpenTask: (task: TaskTarget) => void
+  onOpenAutomations: () => void
   onSignOut: () => Promise<void>
 }) {
   const [projects, setProjects] = useState<Project[]>([])
@@ -233,6 +235,7 @@ export function Board({
             进行中的<em>工作</em>
           </h1>
           <div className="mast-actions">
+            <button onClick={onOpenAutomations}>定时</button>
             <button onClick={() => void load(false)} disabled={!status.gatewayConnected || loading}>
               刷新
             </button>
