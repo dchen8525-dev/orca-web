@@ -90,6 +90,7 @@ jobs:
               /opt/orca-web/dist-server/orca-server --init-config /etc/orca-web/server.json
             fi
             chmod 600 /etc/orca-web/server.json
+            chown orca-web:orca-web /etc/orca-web/server.json
           fi
           if command -v systemctl >/dev/null 2>&1; then
             systemctl daemon-reload
