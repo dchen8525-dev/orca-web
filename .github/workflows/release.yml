@@ -11,7 +11,29 @@ env:
   BUN_VERSION: '1.4.4'
 
 jobs:
+  # The gateway exe compiles on Windows: --windows-icon needs Windows APIs and
+  # cannot cross-compile from Linux (bun docs, "Windows-specific flags").
+  gateway:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Compile the gateway exe (icon baked in)
+        shell: bash
+        run: |
+          bun build --compile apps/gateway/src/main.ts --target=bun-windows-x64 \
+            --windows-icon=design/gateway.ico \
+            --define ORCA_BUILD_VERSION='"'"$GITHUB_REF_NAME"'"' \
+            --outfile orca-gateway-windows-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gateway-exe
+          path: orca-gateway-windows-x64.exe
+
   release:
+    needs: gateway
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,13 +54,13 @@ jobs:
           cp dist-server/orca-gateway.cjs payload/dist-server/
           cp -r apps/web/dist payload/web/
           tar -czf orca-web-release.tar.gz -C payload .
-      # Self-contained binaries: embed the runtime so neither the VPS nor the
-      # home Windows machine needs Node, ws and node:crypto included. The gateway
-      # bakes in the tag so its admin page can run the self-update flow.
-      - name: Compile the standalone binaries
-        run: |
-          bun build --compile apps/gateway/src/main.ts --target=bun-windows-x64 --windows-icon=design/gateway.ico --define ORCA_BUILD_VERSION='"'"$GITHUB_REF_NAME"'"' --outfile orca-gateway-windows-x64.exe
-          bun build --compile apps/server/src/main.ts --target=bun-linux-x64 --outfile orca-server-linux-x64
+      # Self-contained Linux server: embed the runtime so the VPS needs no Node.
+      - name: Compile the Linux server
+        run: bun build --compile apps/server/src/main.ts --target=bun-linux-x64 --outfile orca-server-linux-x64
+      - name: Download the gateway exe from the Windows job
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-exe
       - name: Package the Linux deb
         run: |
           set -euo pipefail
